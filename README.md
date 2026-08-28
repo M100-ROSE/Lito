@@ -1,6 +1,6 @@
 <h1 align="center">M.I.S.P</h1>
 
-<div align-itens="center">
+<div align="center">
   
 | nome | numero | github |
 |:------:|:------:|:------:|
