@@ -8,7 +8,7 @@
 |Maria |  00 | [EDDY](https://github.com/limasantosmaria2112-art)
 |Marcos| 00 | [KIELOP](https://github.com/oliveiramarcos16-eng)
 
-</div>div>
+</div>
 <h2 align="center">SOBRE</h2>
 
 
