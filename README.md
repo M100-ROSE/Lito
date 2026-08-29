@@ -1,5 +1,12 @@
 **<h1 align="center">Lito</h1>**
 
+<h1 align="center">
+  "Saudações Aeronáuticas!" 
+  <br>
+  -Lito Sousa
+  
+</h1>
+
 <div align="center">
   
 | nome | numero | github |
@@ -42,9 +49,3 @@
 
 
 
-<h1 align="center">
-  "Saudações Aeronáuticas!" 
-  <br>
-  -Lito Sousa
-  
-</h1>
