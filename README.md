@@ -26,6 +26,18 @@
 |motor 8520 mini coreless ccw| 2 |
 |sensor de distancia a laser GY-530 VL53L0X | 5|
 |transistor IRLB4132 | 4|
+|bateria lipo 3,7v 500mah|1|
+|kit 127 tubos termo retráteis|1|
+|placa de carregamento bateria lipo|1|
+|giroscópio e acelerómetro MPU6050|1|
+|diodo de 100pol 4148|8|
+|resistores metalicos 1/4w| 8|
+|un cabeçalho de pino de furo redondo|40|
+|fio 24AWG para negativo| 1|
+|fio 24AWG para positivo| 1|
+|fio 30AWG para positivo|1|
+|fio 30AWG para negativo|1|
+|jst ph 2.0mm 2pinos macho femea|3|
 
 
 </div>
