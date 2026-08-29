@@ -11,8 +11,6 @@
 </div>
 <h2 align="center">SOBRE</h2>
 
-
-
 **O Lito é um projeto em homenagem ao Lito Sousa**. Feita por alunos do 1ºDSB para a feira de ciências do Colégio Kennedy, é um drone montado completamente do zero usando um esp wroom32. Para movê-lo usamos um software em Python que usando [mediapipe](https://github.com/google-ai-edge/mediapipe) e [opencv](https://github.com/opencv/opencv) lê suas mãos e dependendo da posição delas ele executa um comando, dentre eles temos, **cima, baixo, frente, trás, esquerda, direita e rotacionar no próprio eixo em sentido horário ou anti-horário** (que será adicionado posteriormente). Aqui listaremos todos os componentes necessários para montar seu próprio Lito, e também todo o diagrama de ligação dos componentes. Após o termino do projeto deixaremos anexados vídeos de seu funcionamento.
 
 <h2 align="center">COMPONENTES</h2>
@@ -41,6 +39,9 @@
 > (os fios devem ser de cores diferentes para ajudar na identificação e vc deve comprar mais um cabo jst ph 2.00m macho e femea caso sua bateria não venha com  )
 
 </div>
+
+
+
 
 > "Saudações Aeronáuticas! "
 > -Lito Sousa
