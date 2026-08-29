@@ -1,6 +1,5 @@
-**<h1 align="center">Lito</h1>**
-
-<h1 align="center">
+**<h1 align="center">Lito
+  <br>
   "Saudações Aeronáuticas!" 
   <br>
   -Lito Sousa
