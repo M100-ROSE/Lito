@@ -25,6 +25,8 @@
 |motor 8520 mini coreless  cw|  2 |
 |motor 8520 mini coreless ccw| 2 |
 |sensor de distancia a laser GY-530 VL53L0X | 5|
+|transistor IRLB4132 | 4|
+
 
 </div>
 
