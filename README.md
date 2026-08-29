@@ -38,7 +38,7 @@
 |fio 30AWG para positivo|1|
 |fio 30AWG para negativo|1|
 |jst ph 2.0mm 2pinos macho femea|3|
-
+> (os fios devem ser de cores diferentes para ajudar na identificação e vc deve comprar mais um cabo jst ph 2.00m macho e femea caso sua bateria não venha com  )
 
 </div>
 
