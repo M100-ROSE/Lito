@@ -60,8 +60,7 @@
 - **Função:** Fonte principal de energia do drone.
 - **Onde fica:** Fixada no centro ou parte de baixo do quadro (para manter o centro de gravidade baixo).
 - **Ligação:** Positivo (vermelho) e negativo (preto) através de conector JST PH 2.0.
-- **Sigla:** LiPo = *Lithium Polymer* (Bateria de Lítio-Polímero).
-
+  
 <h3>1.2 Regulador de Tensão 3,3 V (LDO)</h3>
 
 - **Função:** Transforma a tensão da bateria (3,7~4,2 V) em 3,3 V estáveis e limpos.
@@ -85,18 +84,15 @@
   - µF = Microfarad
   - nF = Nanofarad
 
----
 
 <h2> 2. Controlador de Voo (Cérebro do Drone)</h2>
 
 <h3>2.1 ESP32-WROOM-32</h3>
 
-- **Função:** É o cérebro do drone. Processa os dados dos sensores, calcula a correção de estabilidade (PID) e gera os sinais PWM para os motores. Também permite controle via Wi-Fi.
+- **Função:** É o cérebro do drone. Processa os dados dos sensores, calcula a correção de estabilidade (PID) e gera os sinais PWM para os motores. Também permite controle via bluetooth.
 - **Onde fica:** No centro do quadro, bem fixo e nivelado.
 - **Alimentação:** 3,3 V vindo do regulador.
-- **Sigla:** ESP32 = Microcontrolador da Espressif (versão de 32 bits).
 
----
 
 ## 3. Sensores
 
