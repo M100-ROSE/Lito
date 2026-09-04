@@ -52,4 +52,193 @@
 </div>
 
 
+# Guia Completo do Projeto – Lito
+
+Este documento explica de forma detalhada todos os componentes do seu drone, a função de cada um, onde ele deve ser colocado, como deve ser ligado e o significado das principais siglas.
+
+---
+
+## 1. Sistema de Alimentação
+
+### 1.1 Bateria LiPo 3,7 V 500 mAh
+
+- **Função:** Fonte principal de energia do drone.
+- **Onde fica:** Fixada no centro ou parte de baixo do quadro (para manter o centro de gravidade baixo).
+- **Ligação:** Positivo (vermelho) e negativo (preto) através de conector JST PH 2.0.
+- **Sigla:** LiPo = *Lithium Polymer* (Bateria de Lítio-Polímero).
+
+### 1.2 Regulador de Tensão 3,3 V (LDO)
+
+- **Função:** Transforma a tensão da bateria (3,7~4,2 V) em 3,3 V estáveis e limpos.
+- **Por que é necessário:** O ESP32-WROOM-32 e todos os sensores só funcionam corretamente com 3,3 V.
+- **Onde fica:** Entre a bateria e o ESP32.
+- **Ligação:**
+  - `Vin` → Positivo da bateria
+  - `Vout` → Linha de 3,3 V do projeto
+  - `GND` → Negativo da bateria
+- **Modelos recomendados:** AP2112K-3.3 ou HT7333
+- **Sigla:** LDO = *Low Dropout Regulator* (Regulador de Baixa Queda).
+
+### 1.3 Capacitores
+
+| Capacitor              | Quantidade | Função                              | Onde colocar                              |
+|------------------------|------------|-------------------------------------|-------------------------------------------|
+| 10 µF ou 22 µF         | 2          | Filtragem do regulador              | Entrada e saída do regulador              |
+| 100 nF (0,1 µF)        | 8 a 10     | Desacoplamento (reduz ruído)        | Perto do ESP32, MPU6050 e cada VL53L0X    |
+| 100 µF ou 220 µF       | 1          | Reservatório de energia             | Direto na linha da bateria                |
+
+- **Siglas:**
+  - µF = Microfarad
+  - nF = Nanofarad
+
+---
+
+## 2. Controlador de Voo (Cérebro do Drone)
+
+### 2.1 ESP32-WROOM-32
+
+- **Função:** É o cérebro do drone. Processa os dados dos sensores, calcula a correção de estabilidade (PID) e gera os sinais PWM para os motores. Também permite controle via Wi-Fi.
+- **Onde fica:** No centro do quadro, bem fixo e nivelado.
+- **Alimentação:** 3,3 V vindo do regulador.
+- **Sigla:** ESP32 = Microcontrolador da Espressif (versão de 32 bits).
+
+---
+
+## 3. Sensores
+
+### 3.1 MPU6050 (Giroscópio + Acelerômetro)
+
+- **Função:** Mede a inclinação e a rotação do drone em todos os eixos. Essencial para o controle de estabilidade.
+- **Onde fica:** Bem no centro do quadro, o mais nivelado possível.
+- **Ligação (I2C):**
+  - `VCC` → 3,3 V
+  - `GND` → GND
+  - `SDA` → GPIO 21 do ESP32
+  - `SCL` → GPIO 22 do ESP32
+- **Sigla:** MPU = *Motion Processing Unit* (Unidade de Processamento de Movimento).
+
+### 3.2 GY-530 VL53L0X (Sensor de Distância a Laser) – 5 unidades
+
+- **Função:** Mede a distância até o solo ou obstáculos com precisão (sensor ToF). Usado principalmente para controle de altura (altitude hold).
+- **Onde ficam:** Um apontando para baixo (altura) e os outros podem ser posicionados nas laterais ou frente (detecção de obstáculos), conforme o projeto.
+- **Ligação (I2C – mesmo barramento do MPU6050):**
+  - `VCC` → 3,3 V
+  - `GND` → GND
+  - `SDA` → GPIO 21
+  - `SCL` → GPIO 22
+- **Siglas:**
+  - VL53L0X = Nome do chip sensor
+  - ToF = *Time of Flight* (Tempo de Voo da luz)
+  - GY-530 = Nome do módulo
+
+---
+
+## 4. Sistema de Propulsão (Motores)
+
+### 4.1 Motores Coreless 8025 (2 CW + 2 CCW)
+
+- **Função:** Geram a sustentação (empuxo) do drone.
+- **Onde ficam:** Um em cada braço do quadro.
+- **Sentido de rotação recomendado:**
+  - Frente Direita → CCW
+  - Frente Esquerda → CW
+  - Trás Direita → CW
+  - Trás Esquerda → CCW
+- **Siglas:**
+  - CW = *Clockwise* (Horário)
+  - CCW = *Counter-Clockwise* (Anti-horário)
+  - Coreless = Motor sem núcleo de ferro (mais leve e rápido)
+
+### 4.2 MOSFETs IRLB4132 (1 por motor)
+
+- **Função:** Funcionam como “chaves eletrônicas” que ligam e desligam os motores rapidamente (controle por PWM).
+- **Onde ficam:** Perto de cada motor ou em uma placa central.
+- **Ligação de cada MOSFET:**
+  - `Drain` → Fio negativo do motor
+  - `Source` → GND
+  - `Gate` → Resistor de 100~220 Ω → Pino PWM do ESP32
+- **Sigla:** MOSFET = *Metal-Oxide-Semiconductor Field-Effect Transistor*
+
+### 4.3 Diodos 1N4148 (1 por motor)
+
+- **Função:** Protegem o circuito contra picos de tensão gerados pelos motores (back-EMF).
+- **Onde ficam:** Em paralelo com cada motor (cátodo no positivo do motor).
+
+### 4.4 Resistores
+
+- **100~220 Ω (4 unidades):** Limitam a corrente no Gate do MOSFET.
+- **10 kΩ (4 unidades):** Pull-down – garantem que o motor fique desligado quando o ESP32 está desligado ou reiniciando.
+
+---
+
+## 5. Conexões de Sinais (Resumo)
+
+| Função                    | Pino do ESP32 | Componente ligado            |
+|---------------------------|---------------|------------------------------|
+| I2C SDA                   | GPIO 21       | MPU6050 + 5x VL53L0X         |
+| I2C SCL                   | GPIO 22       | MPU6050 + 5x VL53L0X         |
+| Motor 1 (Frente Direita)  | GPIO 25       | Gate do MOSFET 1             |
+| Motor 2 (Trás Direita)    | GPIO 26       | Gate do MOSFET 2             |
+| Motor 3 (Trás Esquerda)   | GPIO 33       | Gate do MOSFET 3             |
+| Motor 4 (Frente Esquerda) | GPIO 32       | Gate do MOSFET 4             |
+
+---
+
+## 6. Fluxo de Energia (Resumo Visual)
+
+```text
+Bateria LiPo (3,7~4,2 V)
+        │
+        ├──→ Capacitor 100/220 µF
+        │
+        ├──→ Entrada do Regulador 3,3 V
+        │         │
+        │         ├──→ Capacitor 10/22 µF (entrada)
+        │         │
+        │         └──→ Saída 3,3 V
+        │                   │
+        │                   ├──→ Capacitor 10/22 µF (saída)
+        │                   │
+        │                   ├──→ ESP32 (3V3) + Capacitor 100 nF
+        │                   ├──→ MPU6050 + Capacitor 100 nF
+        │                   └──→ 5x VL53L0X + 5x Capacitor 100 nF
+        │
+        └──→ Motores (alimentação direta, sem passar pelo regulador)
+```
+
+---
+
+## 7. Significado das Principais Siglas do Projeto
+
+| Sigla     | Significado Completo                                      | Explicação Simples                              |
+|-----------|-----------------------------------------------------------|-------------------------------------------------|
+| ESP32     | Espressif Systems 32-bit                                  | Microcontrolador principal                      |
+| LiPo      | Lithium Polymer                                           | Tipo de bateria                                 |
+| LDO       | Low Dropout Regulator                                     | Regulador de tensão eficiente                   |
+| MPU6050   | Motion Processing Unit 6050                               | Giroscópio + Acelerômetro                       |
+| VL53L0X   | Sensor de distância a laser                               | Sensor ToF                                      |
+| ToF       | Time of Flight                                            | Mede distância pelo tempo da luz                |
+| MOSFET    | Metal-Oxide-Semiconductor Field-Effect Transistor         | Transistor de potência                          |
+| CW / CCW  | Clockwise / Counter-Clockwise                             | Sentido de rotação das hélices                  |
+| PWM       | Pulse Width Modulation                                    | Controle de velocidade dos motores              |
+| I2C       | Inter-Integrated Circuit                                  | Protocolo de comunicação dos sensores           |
+| GPIO      | General Purpose Input/Output                              | Pinos digitais do ESP32                         |
+| GND       | Ground                                                    | Terra / negativo comum                          |
+| VCC / 3V3 | Voltage Common Collector / 3.3 Volt                       | Alimentação positiva                            |
+| Vin       | Voltage Input                                             | Entrada de tensão do regulador                  |
+| Vout      | Voltage Output                                            | Saída de tensão do regulador                    |
+
+---
+
+## 8. Observações Finais
+
+- Sempre teste os motores **sem hélices** primeiro.
+- Use tubo termo retrátil em todas as soldas.
+- Mantenha os fios de potência (24 AWG) o mais curtos possível.
+- O sensor VL53L0X principal deve apontar para baixo (controle de altura).
+- Calibre o MPU6050 com o drone em superfície plana antes do primeiro voo.
+
+---
+
+**Documento gerado para o projeto de Mini Drone com ESP32-WROOM-32**
 
