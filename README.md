@@ -35,6 +35,10 @@
 |kit 127 tubos termo retráteis|1|
 |placa de carregamento bateria lipo|1|
 |giroscópio e acelerómetro MPU6050|1|
+| Regulador 3,3 V (LDO)|1|
+| Capacitor 10 µF ou 22 µF|2|         
+| Capacitor 100 nF (0.1 µF)|10|
+| Capacitor 100 µF ou 220 µF|1|
 |diodo de 100pol 4148|8|
 |resistores metalicos 1/4w| 8|
 |un cabeçalho de pino de furo redondo|40|
