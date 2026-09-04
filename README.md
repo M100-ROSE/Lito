@@ -52,22 +52,17 @@
 </div>
 
 
-# Guia Completo do Projeto – Lito
+<h2>Guia Completo do Projeto – Lito</h2>
+<h2>1. Sistema de Alimentação</h2>
 
-Este documento explica de forma detalhada todos os componentes do seu drone, a função de cada um, onde ele deve ser colocado, como deve ser ligado e o significado das principais siglas.
-
----
-
-## 1. Sistema de Alimentação
-
-### 1.1 Bateria LiPo 3,7 V 500 mAh
+<h3>1.1 Bateria LiPo 3,7 V 500 mAh</h3>
 
 - **Função:** Fonte principal de energia do drone.
 - **Onde fica:** Fixada no centro ou parte de baixo do quadro (para manter o centro de gravidade baixo).
 - **Ligação:** Positivo (vermelho) e negativo (preto) através de conector JST PH 2.0.
 - **Sigla:** LiPo = *Lithium Polymer* (Bateria de Lítio-Polímero).
 
-### 1.2 Regulador de Tensão 3,3 V (LDO)
+<h3>1.2 Regulador de Tensão 3,3 V (LDO)</h3>
 
 - **Função:** Transforma a tensão da bateria (3,7~4,2 V) em 3,3 V estáveis e limpos.
 - **Por que é necessário:** O ESP32-WROOM-32 e todos os sensores só funcionam corretamente com 3,3 V.
@@ -77,12 +72,11 @@ Este documento explica de forma detalhada todos os componentes do seu drone, a f
   - `Vout` → Linha de 3,3 V do projeto
   - `GND` → Negativo da bateria
 - **Modelos recomendados:** AP2112K-3.3 ou HT7333
-- **Sigla:** LDO = *Low Dropout Regulator* (Regulador de Baixa Queda).
 
-### 1.3 Capacitores
+<h3>1.3 Capacitores</h3>
 
 | Capacitor              | Quantidade | Função                              | Onde colocar                              |
-|------------------------|------------|-------------------------------------|-------------------------------------------|
+|:----------------------:|:----------:|:-----------------------------------:|:-----------------------------------------:|
 | 10 µF ou 22 µF         | 2          | Filtragem do regulador              | Entrada e saída do regulador              |
 | 100 nF (0,1 µF)        | 8 a 10     | Desacoplamento (reduz ruído)        | Perto do ESP32, MPU6050 e cada VL53L0X    |
 | 100 µF ou 220 µF       | 1          | Reservatório de energia             | Direto na linha da bateria                |
@@ -93,9 +87,9 @@ Este documento explica de forma detalhada todos os componentes do seu drone, a f
 
 ---
 
-## 2. Controlador de Voo (Cérebro do Drone)
+<h2> 2. Controlador de Voo (Cérebro do Drone)</h2>
 
-### 2.1 ESP32-WROOM-32
+<h3>2.1 ESP32-WROOM-32</h3>
 
 - **Função:** É o cérebro do drone. Processa os dados dos sensores, calcula a correção de estabilidade (PID) e gera os sinais PWM para os motores. Também permite controle via Wi-Fi.
 - **Onde fica:** No centro do quadro, bem fixo e nivelado.
