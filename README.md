@@ -26,7 +26,7 @@
   
 | nome | quantidadde |
 |:------:|:------:|
-|esp wroom32  |1|
+|esp-32D  |1|
 |motor 8520 mini coreless  cw|  2 |
 |motor 8520 mini coreless ccw| 2 |
 |sensor de distancia a laser GY-530 VL53L0X | 5|
@@ -35,11 +35,6 @@
 |kit 127 tubos termo retráteis|1|
 |placa de carregamento bateria lipo|1|
 |giroscópio e acelerómetro MPU6050|1|
-| Regulador 3,3 V (LDO)|1|
-| Capacitor 10 µF ou 22 µF|2|         
-| Capacitor 100 nF (0.1 µF)|10|
-| Capacitor 100 µF ou 220 µF|1|
-|diodo de 100pol 4148|8|
 |resistores metalicos 1/4w| 8|
 |un cabeçalho de pino de furo redondo|40|
 |fio 24AWG para negativo| 1|
@@ -91,41 +86,28 @@
 
 - **Função:** É o cérebro do drone. Processa os dados dos sensores, calcula a correção de estabilidade (PID) e gera os sinais PWM para os motores. Também permite controle via bluetooth.
 - **Onde fica:** No centro do quadro, bem fixo e nivelado.
-- **Alimentação:** 3,3 V vindo do regulador.
-
-
-## 3. Sensores
-
-### 3.1 MPU6050 (Giroscópio + Acelerômetro)
-
-- **Função:** Mede a inclinação e a rotação do drone em todos os eixos. Essencial para o controle de estabilidade.
-- **Onde fica:** Bem no centro do quadro, o mais nivelado possível.
-- **Ligação (I2C):**
-  - `VCC` → 3,3 V
-  - `GND` → GND
-  - `SDA` → GPIO 21 do ESP32
-  - `SCL` → GPIO 22 do ESP32
-- **Sigla:** MPU = *Motion Processing Unit* (Unidade de Processamento de Movimento).
-
-### 3.2 GY-530 VL53L0X (Sensor de Distância a Laser) – 5 unidades
-
-- **Função:** Mede a distância até o solo ou obstáculos com precisão (sensor ToF). Usado principalmente para controle de altura (altitude hold).
-- **Onde ficam:** Um apontando para baixo (altura) e os outros podem ser posicionados nas laterais ou frente (detecção de obstáculos), conforme o projeto.
-- **Ligação (I2C – mesmo barramento do MPU6050):**
-  - `VCC` → 3,3 V
-  - `GND` → GND
-  - `SDA` → GPIO 21
-  - `SCL` → GPIO 22
-- **Siglas:**
-  - VL53L0X = Nome do chip sensor
-  - ToF = *Time of Flight* (Tempo de Voo da luz)
-  - GY-530 = Nome do módulo
+- **Alimentação:** entre 3,5 e 4,1 da bateria
 
 ---
 
-## 4. Sistema de Propulsão (Motores)
+<h2>3. Sensores</h2>
 
-### 4.1 Motores Coreless 8025 (2 CW + 2 CCW)
+<h3>3.1 MPU6050 (Giroscópio + Acelerômetro)</h3>
+
+- **Função:** Mede a inclinação e a rotação do drone em todos os eixos. Essencial para o controle de estabilidade.
+- **Onde fica:** Bem no centro do quadro, abaixo do esp32.
+
+---
+
+<h3>3.2 GY-530 VL53L0X (Sensor de Distância a Laser) – 5 unidades</h3>
+
+- **Função:** Mede a distância até o solo ou obstáculos com precisão (sensor ToF). Usado principalmente para controle de distancia de obstaculos.
+- **Onde ficam:** Um apontando para baixo(distancia do solo) os outros 4 cada um apontando  para esquerda, direita, frente e trás.
+---
+
+<h2>4. Sistema de Propulsão (Motores)</h2>
+
+<h3> 4.1 Motores Coreless 8025 (2 CW + 2 CCW)</h3>
 
 - **Função:** Geram a sustentação (empuxo) do drone.
 - **Onde ficam:** Um em cada braço do quadro.
@@ -134,10 +116,8 @@
   - Frente Esquerda → CW
   - Trás Direita → CW
   - Trás Esquerda → CCW
-- **Siglas:**
-  - CW = *Clockwise* (Horário)
-  - CCW = *Counter-Clockwise* (Anti-horário)
-  - Coreless = Motor sem núcleo de ferro (mais leve e rápido)
+ 
+---
 
 ### 4.2 MOSFETs IRLB4132 (1 por motor)
 
