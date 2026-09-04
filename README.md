@@ -55,30 +55,6 @@
 - **Função:** Fonte principal de energia do drone.
 - **Onde fica:** Fixada no centro ou parte de baixo do quadro (para manter o centro de gravidade baixo).
 - **Ligação:** Positivo (vermelho) e negativo (preto) através de conector JST PH 2.0.
-  
-<h3>1.2 Regulador de Tensão 3,3 V (LDO)</h3>
-
-- **Função:** Transforma a tensão da bateria (3,7~4,2 V) em 3,3 V estáveis e limpos.
-- **Por que é necessário:** O ESP32-WROOM-32 e todos os sensores só funcionam corretamente com 3,3 V.
-- **Onde fica:** Entre a bateria e o ESP32.
-- **Ligação:**
-  - `Vin` → Positivo da bateria
-  - `Vout` → Linha de 3,3 V do projeto
-  - `GND` → Negativo da bateria
-- **Modelos recomendados:** AP2112K-3.3 ou HT7333
-
-<h3>1.3 Capacitores</h3>
-
-| Capacitor              | Quantidade | Função                              | Onde colocar                              |
-|:----------------------:|:----------:|:-----------------------------------:|:-----------------------------------------:|
-| 10 µF ou 22 µF         | 2          | Filtragem do regulador              | Entrada e saída do regulador              |
-| 100 nF (0,1 µF)        | 8 a 10     | Desacoplamento (reduz ruído)        | Perto do ESP32, MPU6050 e cada VL53L0X    |
-| 100 µF ou 220 µF       | 1          | Reservatório de energia             | Direto na linha da bateria                |
-
-- **Siglas:**
-  - µF = Microfarad
-  - nF = Nanofarad
-
 
 <h2> 2. Controlador de Voo (Cérebro do Drone)</h2>
 
