@@ -1,0 +1,27 @@
+#include "BluetoothSerial.h" // Biblioteca padrão do ESP32
+
+BluetoothSerial ESP_BT;
+int LED = 2;
+
+void setup() {
+  Serial.begin(115200);
+  ESP_BT.begin("LITO"); 
+  pinMode(LED,OUTPUT);
+  Serial.println("O dispositivo já pode ser emparelhado!");
+}
+
+void loop() {
+  // Verifica se recebeu dados via Bluetooth
+  if (ESP_BT.available()) {
+    char sinalRecebido = ESP_BT.read(); // Lê o caractere enviado
+    Serial.print("Sinal recebido: ");
+    Serial.println(sinalRecebido);
+
+    if (sinalRecebido == '1') {
+      digitalWrite(LED, HIGH);
+    } else if (sinalRecebido == '0') {
+      digitalWrite(LED,LOW);
+    }
+  }
+  delay(1000);
+}
