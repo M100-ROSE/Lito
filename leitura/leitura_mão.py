@@ -1,3 +1,4 @@
+import serial
 import cv2
 import time
 import collections
@@ -5,8 +6,17 @@ import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 
-# carrega todas as imagens de direção num dicionário
-# chave = nome da direção, valor = imagem carregada
+porta_bluetooth = "COM4"
+comando = None
+try:
+    # Inicializa a conexão serial com o Bluetooth
+    # O baudrate padrão para Bluetooth Serial costuma ser 9600 ou 115200 (aqui usamos 9600 para estabilidade)
+    esp32 = serial.Serial(porta_bluetooth, 9600, timeout=1)
+    print(f"Conectado com sucesso ao ESP32 na porta {porta_bluetooth}!")
+    time.sleep(2)
+except Exception as e:
+    print(f"Erro ao conectar ou enviar dados: {e}")
+
 IMAGENS = {
     "tras": cv2.imread("./direcoes/tras.jpg"),
     "frente": cv2.imread("./direcoes/frente.jpg"),
@@ -61,7 +71,7 @@ DEDOS = [
 ]
 
 # --- suavização dos pontos (reduz tremedeira visual e de posição) ---
-ALPHA_SUAVIZACAO = 0.4  # peso do frame atual (0 = ignora o novo, 1 = sem suavização)
+ALPHA_SUAVIZACAO = 0.2  # peso do frame atual (0 = ignora o novo, 1 = sem suavização)
 pontos_suavizados = {"Right": None, "Left": None}
 
 # --- estabilização da direção exibida (filtro de voto majoritário) ---
@@ -105,17 +115,14 @@ def dedo_esticado(mao, dedo, lado):
 
 def direcao(dedos_d, dedos_e, pontos_d, pontos_e):
     """
-    Decide qual direção está sendo indicada. Todas as regras exigem
-    que as duas mãos estejam detectadas ao mesmo tempo.
+    Decide qual direção está sendo indicada. Todas as regras exigem que as duas mãos estejam detectadas ao mesmo tempo.
 
     - tras:     as duas mãos abertas
     - frente:   as duas mãos fechadas
     - esquerda: mão esquerda fechada e mão direita aberta
     - direita:  mão direita fechada e mão esquerda aberta
-    - cima:     polegar e indicador fechados nas duas mãos,
-                com a mão esquerda acima da direita
-    - baixo:    polegar e indicador fechados nas duas mãos,
-                com a mão direita acima da esquerda
+    - cima:     polegar e indicador fechados nas duas mãos, com a mão esquerda acima da direita
+    - baixo:    polegar e indicador fechados nas duas mãos,  com a mão direita acima da esquerda
     """
     if dedos_d == [] or dedos_e == [] or pontos_d == [] or pontos_e == []:
         return None
@@ -126,15 +133,23 @@ def direcao(dedos_d, dedos_e, pontos_d, pontos_e):
     mao_esquerda_fechada = not any(dedos_e)
 
     if mao_direita_aberta and mao_esquerda_aberta:
+        comando = "T"
+        esp32.write(comando.encode())
         return "tras"
 
     if mao_direita_fechada and mao_esquerda_fechada:
+        comando = "F"
+        esp32.write(comando.encode())
         return "frente"
 
     if mao_esquerda_fechada and mao_direita_aberta:
+        comando = "E"
+        esp32.write(comando.encode())
         return "esquerda"
 
     if mao_direita_fechada and mao_esquerda_aberta:
+        comando = "D"
+        esp32.write(comando.encode())
         return "direita"
 
     polegar_e_indicador_fechados = (
@@ -147,8 +162,12 @@ def direcao(dedos_d, dedos_e, pontos_d, pontos_e):
         y_pulso_direito = pontos_d[0][1]
 
         if y_pulso_esquerdo < y_pulso_direito:
+            comando = "C"
+            esp32.write(comando.encode())
             return "cima"
         if y_pulso_direito < y_pulso_esquerdo:
+            comando = "B"
+            esp32.write(comando.encode())
             return "baixo"
 
     return None
