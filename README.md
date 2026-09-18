@@ -151,31 +151,6 @@ Bateria LiPo (3,7~4,2 V)
         │
         └──→ Motores (alimentação direta, sem passar pelo regulador)
 ```
-
----
-
-## 7. Significado das Principais Siglas do Projeto
-
-| Sigla     | Significado Completo                                      | Explicação Simples                              |
-|-----------|-----------------------------------------------------------|-------------------------------------------------|
-| ESP32     | Espressif Systems 32-bit                                  | Microcontrolador principal                      |
-| LiPo      | Lithium Polymer                                           | Tipo de bateria                                 |
-| LDO       | Low Dropout Regulator                                     | Regulador de tensão eficiente                   |
-| MPU6050   | Motion Processing Unit 6050                               | Giroscópio + Acelerômetro                       |
-| VL53L0X   | Sensor de distância a laser                               | Sensor ToF                                      |
-| ToF       | Time of Flight                                            | Mede distância pelo tempo da luz                |
-| MOSFET    | Metal-Oxide-Semiconductor Field-Effect Transistor         | Transistor de potência                          |
-| CW / CCW  | Clockwise / Counter-Clockwise                             | Sentido de rotação das hélices                  |
-| PWM       | Pulse Width Modulation                                    | Controle de velocidade dos motores              |
-| I2C       | Inter-Integrated Circuit                                  | Protocolo de comunicação dos sensores           |
-| GPIO      | General Purpose Input/Output                              | Pinos digitais do ESP32                         |
-| GND       | Ground                                                    | Terra / negativo comum                          |
-| VCC / 3V3 | Voltage Common Collector / 3.3 Volt                       | Alimentação positiva                            |
-| Vin       | Voltage Input                                             | Entrada de tensão do regulador                  |
-| Vout      | Voltage Output                                            | Saída de tensão do regulador                    |
-
----
-
 ## 8. Observações Finais
 
 - Sempre teste os motores **sem hélices** primeiro.
