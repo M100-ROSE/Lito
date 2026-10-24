@@ -1,4 +1,31 @@
+"""
+Lito - leitura de mãos e controle do drone por gestos.
+
+Arquitetura do programa (em 4 etapas):
+
+    1. DETECÇÃO   -> MediaPipe HandLandmarker (modo VIDEO) encontra 2 mãos
+                     por frame e devolve 21 landmarks de cada uma.
+    2. CLASSIFICAÇÃO -> cada mão gera um vetor de 5 booleanos (dedos
+                     esticados ou não) e a função direcao() decide qual
+                     gesto está sendo feito. Essa função é PURA: só
+                     devolve um nome ("tras", "frente", ...) ou None.
+                     Ela NÃO conversa com o ESP32.
+    3. VOTAÇÃO    -> direcao_estavel() mantém um histórico das últimas
+                     leituras e só confirma uma direção quando ela vence
+                     por voto majoritário. Isso elimina o flicker de
+                     frames mal classificados.
+    4. ENVIO      -> o comando Bluetooth é enviado APENAS quando a
+                     direção CONFIRMADA muda (ex.: "tras" -> "esquerda"),
+                     uma única letra por mudança. Nada de reenviar a tecla
+                     em loop. Quando nenhuma direção está confirmada
+                     (mãos fora de cena), só atualizamos o estado interno.
+
+Sem Bluetooth conectado o programa continua funcionando normalmente
+(câmera + janelas + votação); apenas não envia comandos.
+"""
+
 import serial
+import pathlib
 import cv2
 import time
 import collections
@@ -6,28 +33,70 @@ import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 
-porta_bluetooth = "COM4"
-comando = None
+# --- conexão com o ESP32 via Bluetooth Serial -------------------------
+# Como descobrir a porta: Gerenciador de Dispositivos -> Portas (COM e LPT)
+# -> "Standard Serial over Bluetooth link (COMx)" -> anote o COMx.
+PORTA_BLUETOOTH = "COM4"
+BAUDRATE = 9600  # mesmo valor configurado no ESP32
+
+# guarda a conexão serial (None significa "sem Bluetooth, modo somente leitura")
+esp32 = None
 try:
-    # Inicializa a conexão serial com o Bluetooth
-    # O baudrate padrão para Bluetooth Serial costuma ser 9600 ou 115200 (aqui usamos 9600 para estabilidade)
-    esp32 = serial.Serial(porta_bluetooth, 9600, timeout=1)
-    print(f"Conectado com sucesso ao ESP32 na porta {porta_bluetooth}!")
+    esp32 = serial.Serial(PORTA_BLUETOOTH, BAUDRATE, timeout=1)
+    print(f"Conectado com sucesso ao ESP32 na porta {PORTA_BLUETOOTH}!")
     time.sleep(2)
 except Exception as e:
-    print(f"Erro ao conectar ou enviar dados: {e}")
+    # Sem Bluetooth o programa segue funcionando, só pula o envio.
+    esp32 = None
+    print(f"Sem conexão com o ESP32 ({e}). Rodando SOMENTE LEITURA "
+          f"(câmera e janelas funcionam, nenhum comando é enviado).")
 
-IMAGENS = {
-    "tras": cv2.imread("./direcoes/tras.jpg"),
-    "frente": cv2.imread("./direcoes/frente.jpg"),
-    "esquerda": cv2.imread("./direcoes/esquerda.jpg"),
-    "direita": cv2.imread("./direcoes/direita.jpg"),
-    "cima": cv2.imread("./direcoes/cima.jpg"),
-    "baixo": cv2.imread("./direcoes/baixo.jpg"),
-}
+# intervalo mínimo entre dois envios de comando (segundos), por segurança
+INTERVALO_MINIMO_ENVIO = 0.5
 
+
+def enviar_comando(letra):
+    """Envia uma única letra ao ESP32, se houver conexão serial.
+
+    Não lança exceção em caso de falha: só avisa no console, para que
+    um cabo/pareamento que caia no meio do uso não derrube o programa.
+    """
+    if esp32 is None:
+        print("Sem conexão Bluetooth - comando não enviado:", letra)
+        return
+    try:
+        esp32.write(letra.encode())
+    except Exception as e:
+        print(f"Erro ao enviar comando '{letra}': {e}")
+
+
+# --- carregamento das imagens das direções ----------------------------
+# Caminho base na pasta do PRÓPRIO script, para funcionar mesmo se o
+# programa for executado de outra pasta (ex.: raiz do projeto).
+PASTA_SCRIPT = pathlib.Path(__file__).resolve().parent
+
+PASTA_IMAGENS = PASTA_SCRIPT / "direcoes"
+NOMES_IMAGENS = ["tras", "frente", "esquerda", "direita", "cima", "baixo"]
+IMAGENS = {}
+imagens_faltando = []
+for nome in NOMES_IMAGENS:
+    caminho = PASTA_IMAGENS / f"{nome}.jpg"
+    imagem = cv2.imread(str(caminho))  # cv2.imread devolve None em silêncio se falhar
+    if imagem is None:
+        imagens_faltando.append(nome)
+    else:
+        IMAGENS[nome] = imagem
+
+if imagens_faltando:
+    print("AVISO: não foi possível carregar as imagens das direções:")
+    for nome in imagens_faltando:
+        print(f"  - {nome}.jpg (procurado em {PASTA_IMAGENS})")
+    print("As janelas dessas direções não serão exibidas.")
+
+# Caminho do modelo do MediaPipe, relativo à pasta do script (mesma lógica
+# das imagens: evita depender do diretório em que o script foi chamado).
 base_options = python.BaseOptions(
-    model_asset_path="hand_landmarker.task"
+    model_asset_path=str(PASTA_SCRIPT / "hand_landmarker.task")
 )
 options = vision.HandLandmarkerOptions(
     base_options=base_options,
@@ -52,6 +121,13 @@ largura_atual = 0
 
 # controla se a janela "captura" já foi posicionada na tela
 janela_captura_posicionada = False
+
+# última direção CONFIRMADA pela votação (ou None no início das mãos
+# não estão sendo lidas). Referência para enviar o comando só na mudança.
+ultima_confirmada = None
+
+# timestamp do último envio serial, para o throttle mínimo entre comandos
+ultimo_envio = 0.0
 
 # confiança mínima para aceitar a classificação de qual mão é qual
 CONFIANCA_MINIMA_LADO = 0.8
@@ -113,16 +189,37 @@ def dedo_esticado(mao, dedo, lado):
         return ponta.y < articulacao.y
 
 
+# letra enviada ao ESP32 para cada direção confirmada
+LETRAS_COMANDO = {
+    "tras": "T",
+    "frente": "F",
+    "esquerda": "E",
+    "direita": "D",
+    "cima": "C",
+    "baixo": "B",
+}
+
+
 def direcao(dedos_d, dedos_e, pontos_d, pontos_e):
     """
-    Decide qual direção está sendo indicada. Todas as regras exigem que as duas mãos estejam detectadas ao mesmo tempo.
+    Decide qual direção está sendo indicada.
+
+    Função PURA: apenas retorna o NOME da direção (ou None); o envio
+    ao ESP32 é feito por enviar_comando() depois da votação confirmar.
+
+    Todas as regras exigem que as duas mãos estejam detectadas ao mesmo tempo:
 
     - tras:     as duas mãos abertas
     - frente:   as duas mãos fechadas
     - esquerda: mão esquerda fechada e mão direita aberta
     - direita:  mão direita fechada e mão esquerda aberta
-    - cima:     polegar e indicador fechados nas duas mãos, com a mão esquerda acima da direita
-    - baixo:    polegar e indicador fechados nas duas mãos,  com a mão direita acima da esquerda
+    - cima:     polegar E indicador fechados E os outros três dedos
+                (médio, anelar e mindinho) esticados nas DUAS mãos,
+                com o pulso esquerdo mais alto que o direito
+    - baixo:    mesmo gesto de cima, mas com o pulso direito mais alto
+
+    Na imagem, o eixo Y cresce para BAIXO, então o pulso mais alto
+    tem o MENOR valor de y (landmark 0 = pulso).
     """
     if dedos_d == [] or dedos_e == [] or pontos_d == [] or pontos_e == []:
         return None
@@ -133,41 +230,32 @@ def direcao(dedos_d, dedos_e, pontos_d, pontos_e):
     mao_esquerda_fechada = not any(dedos_e)
 
     if mao_direita_aberta and mao_esquerda_aberta:
-        comando = "T"
-        esp32.write(comando.encode())
         return "tras"
 
     if mao_direita_fechada and mao_esquerda_fechada:
-        comando = "F"
-        esp32.write(comando.encode())
         return "frente"
 
     if mao_esquerda_fechada and mao_direita_aberta:
-        comando = "E"
-        esp32.write(comando.encode())
         return "esquerda"
 
     if mao_direita_fechada and mao_esquerda_aberta:
-        comando = "D"
-        esp32.write(comando.encode())
         return "direita"
 
-    polegar_e_indicador_fechados = (
-        not dedos_d[0] and not dedos_d[1] and
-        not dedos_e[0] and not dedos_e[1]
+    # Gesto cima/baixo EXATO: nas duas mãos, polegar (índice 0) e indicador
+    # (índice 1) fechados E médio (2), anelar (3) e mindinho (4) esticados.
+    # Assim, estados mistos (ex.: só um deles fechado) não ativam cima/baixo.
+    gesto_cima_baixo = (
+        not dedos_d[0] and not dedos_d[1] and dedos_d[2] and dedos_d[3] and dedos_d[4] and
+        not dedos_e[0] and not dedos_e[1] and dedos_e[2] and dedos_e[3] and dedos_e[4]
     )
 
-    if polegar_e_indicador_fechados:
+    if gesto_cima_baixo:
         y_pulso_esquerdo = pontos_e[0][1]
         y_pulso_direito = pontos_d[0][1]
 
         if y_pulso_esquerdo < y_pulso_direito:
-            comando = "C"
-            esp32.write(comando.encode())
             return "cima"
         if y_pulso_direito < y_pulso_esquerdo:
-            comando = "B"
-            esp32.write(comando.encode())
             return "baixo"
 
     return None
@@ -298,6 +386,19 @@ while camera.isOpened():
     )
     direcao_confirmada = direcao_estavel(direcao_atual)
     mostrar_direcao(direcao_confirmada)
+
+    # --- envio do comando (único lugar que conversa com o ESP32) ---
+    # Só envia quando a direção CONFIRMADA muda em relação à última
+    # confirmada. Volta para None (mãos saem de cena) apenas atualiza o
+    # estado, sem enviar nada.
+    if direcao_confirmada != ultima_confirmada:
+        if direcao_confirmada is not None:
+            letra = LETRAS_COMANDO.get(direcao_confirmada)
+            agora = time.time()
+            if letra is not None and agora - ultimo_envio >= INTERVALO_MINIMO_ENVIO:
+                enviar_comando(letra)
+                ultimo_envio = agora
+        ultima_confirmada = direcao_confirmada
 
     # fecha a janela se 's' for pressionado
     if cv2.waitKey(25) & 0xFF == ord('s'):

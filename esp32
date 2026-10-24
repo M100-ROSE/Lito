@@ -1,27 +1,90 @@
+// ------------------------------------------------------------------
+// Lito - ESP32 (receptor de comandos por gestos via Bluetooth Serial)
+//
+// O Python (leitura/leitura_mao.py) envia UMA letra por mudança de
+// direção confirmada:
+//   'T' -> TRÁS      'F' -> FRENTE
+//   'E' -> ESQUERDA  'D' -> DIREITA
+//   'C' -> CIMA      'B' -> BAIXO
+// Mantemos também os comandos antigos      '1' -> LED liga
+// criados para o testebluetooth.py:        '0' -> LED desliga
+//
+// O loop agora tem delay(20) e esvazia TODOS os bytes disponíveis por
+// passo, para não atrasar os comandos (antes com delay(1000) só 1 char
+// era lido a cada segundo e a fila acumulava).
+// ------------------------------------------------------------------
+
 #include "BluetoothSerial.h" // Biblioteca padrão do ESP32
 
 BluetoothSerial ESP_BT;
 int LED = 2;
 
+// Tempo do pulso curto no LED ao receber uma letra de direção (ms)
+const int BLINK_MS = 60;
+
+// Pisca rápido o LED uma vez, para dar feedback visível do comando
+// recebido. Termina com o LED aceso brevemente apagado.
+void blinkRapido() {
+  digitalWrite(LED, HIGH);
+  delay(BLINK_MS);
+  digitalWrite(LED, LOW);
+}
+
 void setup() {
   Serial.begin(115200);
-  ESP_BT.begin("LITO"); 
-  pinMode(LED,OUTPUT);
+  ESP_BT.begin("LITO"); // O nome do dispositivo continua "LITO"
+  pinMode(LED, OUTPUT);
   Serial.println("O dispositivo já pode ser emparelhado!");
 }
 
 void loop() {
-  // Verifica se recebeu dados via Bluetooth
-  if (ESP_BT.available()) {
+  // Processa TODOS os bytes disponíveis neste passo do loop
+  while (ESP_BT.available()) {
     char sinalRecebido = ESP_BT.read(); // Lê o caractere enviado
     Serial.print("Sinal recebido: ");
     Serial.println(sinalRecebido);
 
-    if (sinalRecebido == '1') {
-      digitalWrite(LED, HIGH);
-    } else if (sinalRecebido == '0') {
-      digitalWrite(LED,LOW);
+    switch (sinalRecebido) {
+      // --- comandos de direção enviados pelo leitura_mao.py ---
+      case 'T':
+        Serial.println("TRÁS");
+        blinkRapido();
+        break;
+      case 'F':
+        Serial.println("FRENTE");
+        blinkRapido();
+        break;
+      case 'E':
+        Serial.println("ESQUERDA");
+        blinkRapido();
+        break;
+      case 'D':
+        Serial.println("DIREITA");
+        blinkRapido();
+        break;
+      case 'C':
+        Serial.println("CIMA");
+        blinkRapido();
+        break;
+      case 'B':
+        Serial.println("BAIXO");
+        blinkRapido();
+        break;
+
+      // --- comandos antigos de teste do LED (testebluetooth.py) ---
+      case '1':
+        digitalWrite(LED, HIGH);
+        break;
+      case '0':
+        digitalWrite(LED, LOW);
+        break;
+
+      default:
+        // Byte desconhecido: só avisa e segue o loop
+        Serial.println("Comando não reconhecido.");
+        break;
     }
   }
-  delay(1000);
+
+  delay(20); // loop rápido: comandos chegam sem atraso perceptível
 }

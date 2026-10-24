@@ -1,0 +1,9 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Config local do OpenCode
+.opencode/
+
+# Ambiente / segredos
+.env
