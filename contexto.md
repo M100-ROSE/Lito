@@ -43,13 +43,16 @@ arquivo `esp32`).
   compatibilidade com `testebluetooth.py`, `'1'` acende e `'0'` apaga o LED;
   byte desconhecido apenas avisa.
 - `modelo/drone.glb|.stl|.zip` — modelo 3D do drone.
-- `README.md` — documentação completa em 10 seções: arquitetura (pipeline
-  detecção → classificação → votação → envio), gestos com as imagens de
-  `leitura/direcoes/*.jpg`, contrato Bluetooth (T/F/E/D/C/B + `'1'`/`'0'`,
-  COM4 9600), hardware corrigido e unificado no motor 8520 mini coreless
-  (com capacitores, diodos 1N4148 e resistores 10 kΩ na lista), tabelas de
-  pinos e rotação dos motores, fluxo de energia, modelo 3D (`modelo/drone.*`),
-  guia de execução passo a passo e roadmap.
+- `README.md` — documentação completa em 11 seções: arquitetura (pipeline
+  detecção → classificação → votação → envio), seção "A Homenagem" com fotos
+  oficiais do Lito Sousa (avatar do canal no hero, foto Lito e Mila, retrato
+  Voe Sem Medo e banner do canal — hotlinkadas do YouTube), gestos com as
+  imagens de `leitura/direcoes/*.jpg`, contrato Bluetooth (T/F/E/D/C/B +
+  `'1'`/`'0'`, COM4 9600), hardware corrigido e unificado no motor 8520 mini
+  coreless (com capacitores, diodos 1N4148 e resistores 10 kΩ na lista),
+  tabelas de pinos e rotação dos motores, fluxo de energia, modelo 3D
+  (`modelo/drone.*`), guia de execução passo a passo, roadmap e créditos
+  com os links oficiais do canal.
 
 ### Contrato de comandos Bluetooth
 
@@ -155,6 +158,37 @@ de mãos em homenagem ao Lito Sousa (canal Aviões e Músicas).
 - [ ] Anexar vídeos de funcionamento após a feira de ciências.
 - [ ] Confirmar o modelo real do motor (8520 vs 8025 apareciam inconsistentes no
       README antigo; hoje tudo unificado em 8520).
+
+### 2026-10-24 — Fotos do Lito Sousa no README
+
+**Solicitação**: adicionar fotos do Lito para não perder o foco da homenagem.
+
+**O que foi feito**:
+- [x] Monica pesquisou e testou URLs oficiais (avatar yt3, banner yt3,
+      thumbnails ytimg dos vídeos 5EXbT-exVzE e 8AMu8XXIdfs — todas HTTP 200,
+      sem token que expire).
+- [x] Day criou a seção "2. ✈️ A Homenagem" com as fotos + avatar redondo no
+      hero + links oficiais nos créditos; seções renumeradas de 1 a 11
+      (com 7.1–7.8 e 9.1–9.4) e âncora do Contrato Bluetooth atualizada (## 6).
+- [x] Bebell verificou: seções 1–11 contínuas e créditos com links oficiais
+      confirmados no arquivo final.
+- [x] Tom calibrado respeitando o momento atual do Lito (legado vivo pela
+      família, sem menção à doença).
+
+**Arquivos alterados**: `README.md`, `contexto.md`.
+
+**Pendências**:
+- [ ] Confirmar se a porta do Bluetooth é COM4 (ajustar `PORTA_BLUETOOTH` no topo de
+      `leitura/leitura_mão.py` se não for).
+- [ ] Testar o gesto cima/baixo com as mãos reais (agora é mais rigoroso) e calibrar se precisar.
+- [ ] Compilar/carregar o sketch `esp32` na placa via IDE Arduino (nunca testado).
+- [ ] Futuro: comandos de rotação no próprio eixo (horário/anti-horário) citados no README.
+- [ ] Anexar vídeos de funcionamento após a feira de ciências.
+- [ ] Confirmar o modelo real do motor (8520 vs 8025 apareciam inconsistentes no
+      README antigo; hoje tudo unificado em 8520).
+- [ ] Avatares/banners do YouTube podem mudar se o canal alterar imagem de
+      perfil/capa — revisar visual do README na página do GitHub depois do
+      push e trocar de URL se algo quebrar.
 
 ## Modelo para novas entradas
 

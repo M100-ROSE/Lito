@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="https://yt3.googleusercontent.com/qjnvEA6RHYQ9os0qYpzumico-4wrC1Omdhk_FleTgZWGGyT_f_ogFLEg1hXyI3UlelOmWGSaVg=s800-c-k-c0x00ffffff-no-rj" width="120" alt="Lito Sousa — avatar do canal Aviões e Músicas" style="border-radius: 50%"/>
+
 # ✈️ LITO
 
 **"Saudações Aeronáuticas!" — Lito Sousa**
@@ -42,7 +44,33 @@ o diagrama de ligação completo e todas as instruções de uso do software.
 
 ---
 
-## 2. 👥 Equipe
+## 2. ✈️ A Homenagem
+
+Este projeto carrega o nome dele: **cada voo do Lito-drone é uma Saudação Aeronáutica.** 🚁✈️
+
+O **Lito Sousa** passou mais de duas décadas descomplicando a aviação para milhões de
+brasileiros, com leveza, música e aquele "perca o medo de voar" que virou marca registrada.
+Hoje, a família e os amigos mantêm o canal e esse legado vivos — e é com esse mesmo
+espírito que os alunos do 1ºDSB colocam este drone no ar.
+
+<p align="center">
+  <img src="https://i.ytimg.com/vi/5EXbT-exVzE/maxresdefault.jpg" width="600" alt="Lito Sousa e Mila ao pôr do sol, com um avião ao fundo"/>
+  <br/>
+  <sub><i>Lito Sousa e Mila — Saudações Aeronáuticas!</i></sub>
+</p>
+
+<p align="center">
+  <img src="https://i.ytimg.com/vi/8AMu8XXIdfs/maxresdefault.jpg" width="280" alt="Lito Sousa com uma aviação na mão, da série Voe Sem Medo"/> &nbsp;&nbsp;
+  <img src="https://yt3.googleusercontent.com/foOFdu58Bj-2ELcVQfXN9-moMMFNNt6nN7JeAoZ_mJXlNZw07ZA09VP5Di4Y_BxIb7B_8wM1nw=w1060-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj" width="280" alt="Banner do canal Aviões e Músicas"/>
+  <br/>
+  <sub><i>Lito Sousa, o homem que tirou o medo de voar de milhões de brasileiros · Aviões e Músicas — descomplicando a aviação há mais de 20 anos</i></sub>
+</p>
+
+<p align="center"><sub>Imagens: canal oficial <a href="https://www.youtube.com/@AvioesEMusicas">Aviões e Músicas</a> / YouTube</sub></p>
+
+---
+
+## 3. 👥 Equipe
 
 | Nome   | GitHub |
 |:------:|:------:|
@@ -52,7 +80,7 @@ o diagrama de ligação completo e todas as instruções de uso do software.
 
 ---
 
-## 3. 📡 Como Funciona
+## 4. 📡 Como Funciona
 
 O sistema funciona em uma cadeia de 3 etapas, da câmera até o ESP32:
 
@@ -84,7 +112,7 @@ O sistema funciona em uma cadeia de 3 etapas, da câmera até o ESP32:
 
 ---
 
-## 4. 🖐️ Gestos
+## 5. 🖐️ Gestos
 
 Cada direção exige as **duas mãos** visíveis ao mesmo tempo. As imagens de referência
 abaixo ficam em `leitura/direcoes/` e são exibidas na tela durante o uso:
@@ -103,7 +131,7 @@ abaixo ficam em `leitura/direcoes/` e são exibidas na tela durante o uso:
 
 ---
 
-## 5. 🔊 Contrato Bluetooth
+## 6. 🔊 Contrato Bluetooth
 
 O `leitura_mão.py` envia **um byte (uma letra)** ao ESP32 a cada mudança de direção confirmada:
 
@@ -135,9 +163,9 @@ O `leitura_mão.py` envia **um byte (uma letra)** ao ESP32 a cada mudança de di
 
 ---
 
-## 6. 🔧 Hardware
+## 7. 🔧 Hardware
 
-### 6.1 Lista de Componentes
+### 7.1 Lista de Componentes
 
 | Nome | Quantidade |
 |:-----|:----------:|
@@ -168,7 +196,7 @@ O `leitura_mão.py` envia **um byte (uma letra)** ao ESP32 a cada mudança de di
 
 ---
 
-### 6.2 Sistema de Alimentação
+### 7.2 Sistema de Alimentação
 
 #### Bateria LiPo 3,7 V 500 mAh
 
@@ -179,7 +207,7 @@ O `leitura_mão.py` envia **um byte (uma letra)** ao ESP32 a cada mudança de di
 
 ---
 
-### 6.3 Controlador de Voo (Cérebro do Drone)
+### 7.3 Controlador de Voo (Cérebro do Drone)
 
 #### ESP32-WROOM-32
 
@@ -191,7 +219,7 @@ O `leitura_mão.py` envia **um byte (uma letra)** ao ESP32 a cada mudança de di
 
 ---
 
-### 6.4 Sensores
+### 7.4 Sensores
 
 #### MPU6050 (Giroscópio + Acelerômetro)
 
@@ -208,7 +236,7 @@ O `leitura_mão.py` envia **um byte (uma letra)** ao ESP32 a cada mudança de di
 
 ---
 
-### 6.5 Sistema de Propulsão (Motores)
+### 7.5 Sistema de Propulsão (Motores)
 
 #### Motores Coreless 8520 (2 CW + 2 CCW)
 
@@ -248,7 +276,7 @@ O `leitura_mão.py` envia **um byte (uma letra)** ao ESP32 a cada mudança de di
 
 ---
 
-### 6.6 Conexões de Sinais (Resumo)
+### 7.6 Conexões de Sinais (Resumo)
 
 | Função | Pino do ESP32 | Componente ligado |
 |:-------|:-------------:|:------------------|
@@ -261,7 +289,7 @@ O `leitura_mão.py` envia **um byte (uma letra)** ao ESP32 a cada mudança de di
 
 ---
 
-### 6.7 Fluxo de Energia (Resumo Visual)
+### 7.7 Fluxo de Energia (Resumo Visual)
 
 ```text
 Bateria LiPo (3,7~4,2 V)
@@ -285,7 +313,7 @@ Bateria LiPo (3,7~4,2 V)
 
 ---
 
-### 6.8 ⚠️ Observações Finais de Segurança
+### 7.8 ⚠️ Observações Finais de Segurança
 
 - Sempre teste os motores **sem hélices** primeiro.
 - Use tubo termorretrátil em **todas as soldas**.
@@ -295,7 +323,7 @@ Bateria LiPo (3,7~4,2 V)
 
 ---
 
-## 7. 📦 Modelo 3D
+## 8. 📦 Modelo 3D
 
 O desenho 3D do **chassi/corpo do drone** está na pasta `modelo/`:
 
@@ -307,16 +335,16 @@ O desenho 3D do **chassi/corpo do drone** está na pasta `modelo/`:
 
 ---
 
-## 8. 🛠️ Como Executar
+## 9. 🛠️ Como Executar
 
-### 8.1 Requisitos
+### 9.1 Requisitos
 
 - **Python 3** instalado no computador;
 - **Webcam** funcionando;
 - PC **com Bluetooth** integrado ou adaptador externo;
 - Placa **ESP32** com o sketch carregado.
 
-### 8.2 Instalação
+### 9.2 Instalação
 
 Instale as dependências Python:
 
@@ -324,12 +352,12 @@ Instale as dependências Python:
 pip install opencv-python mediapipe pyserial
 ```
 
-### 8.3 Passo a passo
+### 9.3 Passo a passo
 
 1. **Carregue o sketch `esp32`** (arquivo na raiz do repositório) na placa, via IDE
    Arduino. O dispositivo Bluetooth aparecerá com o nome **"LITO"**.
 2. **Emparelhe o "LITO"** no Windows e descubra a porta COM (dica na seção
-   [Contrato Bluetooth](#5--contrato-bluetooth)).
+   [Contrato Bluetooth](#6--contrato-bluetooth)).
 3. **Ajuste a porta**, se necessário: edite a constante `PORTA_BLUETOOTH` no topo de
    `leitura/leitura_mão.py` (padrão: `COM4`).
 4. **Rode o programa de reconhecimento de gestos:**
@@ -341,7 +369,7 @@ python "leitura/leitura_mão.py"
 > 💡 Para testar só o Bluetooth, rode `python leitura/testebluetooth.py` e envie `1`/`0`
 > para acender/apagar o LED do ESP32.
 
-### 8.4 Estrutura do Repositório
+### 9.4 Estrutura do Repositório
 
 ```text
 Lito/
@@ -366,16 +394,18 @@ Lito/
 
 ---
 
-## 9. 🗺️ Roadmap
+## 10. 🗺️ Roadmap
 
 - [ ] **Rotação no próprio eixo** (sentido horário e anti-horário) — planejada;
 - [ ] **Vídeos de funcionamento** — a anexar após a feira de ciências.
 
 ---
 
-## 10. ❤️ Créditos e Licença
+## 11. ❤️ Créditos e Licença
 
 > **Feito com ❤ pelos alunos do 1ºDSB — em homenagem a Lito Sousa ✈️**
 
 Inspirado e realizado como tributo ao canal
 [**Aviões e Músicas**](https://www.youtube.com/@AvioesEMusicas) — *"Saudações Aeronáuticas!"* 🚁
+
+**Conheça o canal:** [YouTube](https://www.youtube.com/@AvioesEMusicas) · [Site](https://www.avioesemusicas.com) · [Instagram](https://www.instagram.com/lito) (@lito)
