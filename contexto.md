@@ -43,7 +43,13 @@ arquivo `esp32`).
   compatibilidade com `testebluetooth.py`, `'1'` acende e `'0'` apaga o LED;
   byte desconhecido apenas avisa.
 - `modelo/drone.glb|.stl|.zip` — modelo 3D do drone.
-- `README.md` — visão geral, componentes, alimentação, pinos e fluxo de energia.
+- `README.md` — documentação completa em 10 seções: arquitetura (pipeline
+  detecção → classificação → votação → envio), gestos com as imagens de
+  `leitura/direcoes/*.jpg`, contrato Bluetooth (T/F/E/D/C/B + `'1'`/`'0'`,
+  COM4 9600), hardware corrigido e unificado no motor 8520 mini coreless
+  (com capacitores, diodos 1N4148 e resistores 10 kΩ na lista), tabelas de
+  pinos e rotação dos motores, fluxo de energia, modelo 3D (`modelo/drone.*`),
+  guia de execução passo a passo e roadmap.
 
 ### Contrato de comandos Bluetooth
 
@@ -109,6 +115,46 @@ commitar e enviar.
 - [ ] Testar o gesto cima/baixo com as mãos reais (agora é mais rigoroso) e calibrar se precisar.
 - [ ] Compilar/carregar o sketch `esp32` na placa via IDE Arduino (nunca testado).
 - [ ] Futuro: comandos de rotação no próprio eixo (horário/anti-horário) citados no README.
+
+### 2026-10-24 — Reescrita completa do README
+
+**Solicitação**: melhorar o README; projeto é um drone controlado por reconhecimento
+de mãos em homenagem ao Lito Sousa (canal Aviões e Músicas).
+
+**O que foi feito**:
+- [x] Day redesenhou o README por completo: hero centralizado com
+      "Saudações Aeronáuticas!" — Lito Sousa e homenagem ao canal
+      [Aviões e Músicas](https://www.youtube.com/@AvioesEMusicas); badges
+      (Python, OpenCV, MediaPipe, ESP32, Arduino, Bluetooth); seções
+      numeradas de 1 a 10 sem saltos (Sobre, Equipe, Como Funciona com
+      diagrama ASCII do pipeline, Gestos, Contrato Bluetooth, Hardware,
+      Modelo 3D, Como Executar, Estrutura do Repositório, Roadmap e Créditos).
+- [x] Gestos documentados com as imagens de `leitura/direcoes/*.jpg`
+      (verificadas: tras, frente, esquerda, direita, cima e baixo existem).
+- [x] Contrato Bluetooth documentado (T/F/E/D/C/B + `'1'`/`'0'` de teste,
+      COM4 9600, com dica para descobrir a porta).
+- [x] Hardware corrigido: typo "quantidadde" corrigido; motor 8025 da seção
+      antiga unificado para 8520 mini coreless conforme tabela de componentes;
+      adicionados à lista capacitores 100/220 µF e 10/22 µF, diodos 1N4148 x4
+      e resistores 10 kΩ (pull-down).
+- [x] Tabelas de pinos e rotação dos motores, fluxo de energia e observações
+      de segurança reorganizadas na seção de Hardware.
+- [x] Seção Modelo 3D (`modelo/drone.glb|.stl|.zip`) e guia "Como Executar"
+      (dependências pip, carregar sketch na IDE Arduino, emparelhar "LITO",
+      porta COM4, rodar `leitura/leitura_mão.py`).
+- [x] Roadmap atualizado (rotação no próprio eixo; vídeos pós-feira).
+
+**Arquivos alterados**: `README.md`, `contexto.md`.
+
+**Pendências**:
+- [ ] Confirmar se a porta do Bluetooth é COM4 (ajustar `PORTA_BLUETOOTH` no topo de
+      `leitura/leitura_mão.py` se não for).
+- [ ] Testar o gesto cima/baixo com as mãos reais (agora é mais rigoroso) e calibrar se precisar.
+- [ ] Compilar/carregar o sketch `esp32` na placa via IDE Arduino (nunca testado).
+- [ ] Futuro: comandos de rotação no próprio eixo (horário/anti-horário) citados no README.
+- [ ] Anexar vídeos de funcionamento após a feira de ciências.
+- [ ] Confirmar o modelo real do motor (8520 vs 8025 apareciam inconsistentes no
+      README antigo; hoje tudo unificado em 8520).
 
 ## Modelo para novas entradas
 
