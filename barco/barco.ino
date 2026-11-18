@@ -44,13 +44,32 @@
 //  - Só `BluetoothSerial ESP_BT;` e um `ESP_BT.begin("BARCO")` no setup.
 //    Sem checar retorno, sem retry, sem ESP_BT.end(), sem
 //    esp_bt_gap_set_scan_mode() e sem consultar bonded/hasClient() no loop.
+//  - ÚNICA exceção, opcional e controlada por LIMPAR_PAREAMENTOS (veja
+//    abaixo): apagar os bonds salvos UMA vez, logo depois do begin().
 //  - Todo diagnóstico extra de rádio foi REMOVIDO DE PROPÓSITO: em um PC o
 //    anúncio do "BARCO" não aparecia, enquanto o "LITO" (que só chama
 //    begin()) aparecia. Ficamos exatamente com o caminho já provado.
 //  - O que ainda é impresso é só texto no Serial USB; nenhuma chamada de
 //    rádio a mais. Se o problema for emparelhamento, veja o README >
 //    "Se o BARCO não aparecer no Bluetooth".
+//
+// LIMPAR_PAREAMENTOS (pareamento "pela metade"):
+//  - Quando o Windows emparelha pela metade (bond criado no PC mas não no
+//    ESP32, ou bond velho/corrompido no ESP32), o aparelho aparece na lista
+//    como "Não conectado" e nunca conecta -- e o Windows não deixa parear de
+//    novo porque acha que já está pareado.
+//  - Com LIMPAR_PAREAMENTOS = 1, o ESP32 APAGA TODOS os bonds salvos nele no
+//    boot, forçando um pareamento limpo do zero no PC (é preciso parear de
+//    novo). Tem que ser chamado DEPOIS do begin(): a API de bond só funciona
+//    com o Bluetooth já iniciado.
+//  - Com LIMPAR_PAREAMENTOS = 0, nada é apagado (comportamento anterior).
+//  - É só para teste: depois de pareado e funcionando, volte para 0 para não
+//    apagar o pareamento bom a cada boot.
 // ------------------------------------------------------------------
+
+// Apaga TODOS os pareamentos salvos no ESP32 no boot (útil no teste:
+// garante que o PC faça um pareamento limpo). 1 = apaga, 0 = mantém.
+#define LIMPAR_PAREAMENTOS 1
 
 #include "BluetoothSerial.h" // Biblioteca padrão do ESP32 (Bluetooth Classic/SPP)
 
@@ -211,6 +230,16 @@ void setup() {
   // 3) Bluetooth EXATAMENTE como no esp32/esp32.ino que funciona:
   //    só o begin(), com nome próprio para não colidir com o "LITO".
   ESP_BT.begin("BARCO");
+
+  // 3.1) Opcional (LIMPAR_PAREAMENTOS): apaga os bonds antigos UMA vez.
+  //      DEPOIS do begin() de propósito: a API de bond do ESP32 só funciona
+  //      com o Bluetooth já iniciado. Sem isso, um pareamento "pela metade"
+  //      no Windows (aparelho listado como "Não conectado") nunca reconecta.
+  if (LIMPAR_PAREAMENTOS) {
+    ESP_BT.deleteAllBondedDevices();
+    Serial.println("Pareamentos antigos apagados (faca o pareamento de novo no PC).");
+  }
+
   Serial.println("BARCO pronto para emparelhar.");
   Serial.println("Teste: 'A' = duas maos abertas (pino 25 HIGH).");
 

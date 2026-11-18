@@ -88,6 +88,12 @@ câmera e envia comandos via Bluetooth Serial para um ESP32 (sketch Arduino em
     só chama `begin()`) aparecia; todo o diagnóstico extra de rádio foi removido de
     propósito. `imprimirDiagnostico()` ficou só com 2 linhas de texto (core + modelo do
     chip) e não faz nenhuma chamada de rádio.
+    **Única exceção ao esquema mínimo**: a constante `LIMPAR_PAREAMENTOS` (topo do
+    `barco.ino`) — com `1`, logo DEPOIS do `begin()` (a API de bond exige o Bluetooth já
+    iniciado) o sketch chama `ESP_BT.deleteAllBondedDevices()` e avisa no Serial,
+    forçando um pareamento limpo no PC; com `0`, nada é apagado (comportamento anterior).
+    É uma constante **de teste**: apaga o bom pareamento a cada boot, então deve voltar
+    para `0` depois de tudo funcionar.
     **Duas origens de comando**, com a MESMA lógica (`processarComando()`): Bluetooth
     (`ESP_BT`) e **Serial USB** (`Serial`, 115200), consumidas por
     `processarFonte(Stream&, origem)` no `loop()`. O boot avisa
@@ -100,11 +106,16 @@ câmera e envia comandos via Bluetooth Serial para um ESP32 (sketch Arduino em
   - `barco/README.md` — pinos, protocolo A/F, como rodar, firmware e avisos; traz a seção
     **"Teste sem Bluetooth (pelo USB)"** (gravar, fechar o Monitor Serial, achar a COM do
     CP210x/CH340 ou usar `--listar`, rodar com `--porta COMx`, o que deve acontecer) e a
-    seção **"Se o BARCO não aparecer no Bluetooth"** (8 passos: gravar de verdade,
+    seção **"Se o BARCO não aparecer/conectar no Bluetooth"** (8 passos: gravar de verdade,
     Monitor Serial 115200, cabo com dados, Windows 11 24H2/25H2 com "Mostrar todos os
     dispositivos"/descoberta Avançado e remoção de pareamentos antigos em Configurações e
     em `control printers`, teste com fone Bluetooth para provar Classic no PC, brownout,
-    chip sem BT Classic, plano B pelo USB).
+    chip sem BT Classic, plano B pelo USB). Traz também a subseção **"Aparece, mas fica
+    'Não conectado'"**: em SPP o vínculo só nasce quando um programa abre a porta COM
+    (conferir a COM em `control printers`/`Win32_SerialPort` e rodar
+    `python leitura_mao_barco.py --porta COMx`); sem porta COM = pareamento pela metade
+    (remover no Windows, reiniciar o BT, regravar e parear de novo); e a `BluetoothSerial`
+    aceita **um cliente por vez** (celular/outro PC conectado bloqueia o seu).
 - `requirements.txt` — dependências Python fixadas (`mediapipe>=0.10.30,<0.11`,
   `opencv-python>=4.9`, `pyserial>=3.5`); instalar com `pip install -r requirements.txt`
   (Python 3.10+, testado em 3.14.6).
@@ -153,6 +164,40 @@ Como descobrir a porta: Gerenciador de Dispositivos → Portas (COM e LPT) → "
   (no OpenCV o eixo Y cresce para baixo; pulso = landmark 0).
 
 ## Histórico
+
+### 2026-11-18 — Barco: limpeza de pareamentos e troubleshooting de conexão
+
+**Solicitação**: o "BARCO" passou a aparecer no PC do usuário, mas fica como "Não
+conectado" no Bluetooth (pedido de resumo: "aparece, mas não conecta").
+
+**O que foi feito**:
+- [x] `barco/barco.ino`: nova constante `#define LIMPAR_PAREAMENTOS 1` no topo (comentada:
+      1 apaga os bonds no boot, 0 mantém) e, logo após `ESP_BT.begin("BARCO")`,
+      `if (LIMPAR_PAREAMENTOS) { ESP_BT.deleteAllBondedDevices(); Serial.println(...); }`.
+      Fica depois do `begin()` de propósito (a API de bond só funciona com o Bluetooth já
+      iniciado). API confirmada em `BluetoothSerial.h` do core 3.3.11. O cabeçalho documenta
+      o porquê (pareamento "pela metade" deixa o aparelho listado como "Não conectado").
+- [x] Resto do firmware **intacto**: Bluetooth continua mínimo (só `begin()` + esse bloco
+      condicional), protocolo A/F, Serial USB, pino 25, blink não bloqueante e failsafe
+      de 2 s sem mudanças.
+- [x] `barco/README.md`: seção renomeada para "Se o BARCO não aparecer/conectar no
+      Bluetooth", bloco de boot atualizado com a linha de "Pareamentos antigos apagados" e
+      nova subseção **"Aparece, mas fica 'Não conectado'"** — (1) em SPP esse estado é
+      normal, o vínculo só nasce quando um programa abre a porta COM (conferir a COM em
+      `control printers` → COM ports, ou `Get-CimInstance Win32_SerialPort`, e rodar
+      `python leitura_mao_barco.py --porta COMx`); (2) sem porta COM = pareamento pela
+      metade (remover no Windows, reiniciar o BT, regravar, parear de novo); (3) a
+      `BluetoothSerial` aceita um cliente por vez (celular/outro PC bloqueia).
+- [x] Compilação: `arduino-cli compile --fqbn esp32:esp32:esp32 --warnings all barco` →
+      0 erros, 0 avisos (1.063.536 B flash / 81%, 41.892 B RAM / 12%).
+
+**Arquivos alterados**: `barco/barco.ino`, `barco/README.md`, `contexto.md`.
+
+**Pendências**:
+- [ ] Usuário confirmar o pareamento limpo e a porta COM do BARCO (e que a conexão ativa
+      quando o programa abre a COM).
+- [ ] Depois de funcionar, voltar `LIMPAR_PAREAMENTOS` para `0` (com `1`, o pareamento bom
+      é apagado a cada boot).
 
 ### 2026-11-18 — Barco: Bluetooth simplificado e teste por USB
 

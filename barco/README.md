@@ -91,6 +91,7 @@ do próprio `ESP_BT.begin()`):
 Core Arduino-ESP32: 3.3.11
 Chip: ESP32-D0WD-V3
 ==========================================
+Pareamentos antigos apagados (faca o pareamento de novo no PC).
 BARCO pronto para emparelhar.
 Teste: 'A' = duas maos abertas (pino 25 HIGH).
 Controle por USB (Serial) tambem ativo: A/F.
@@ -104,7 +105,26 @@ bonded e não há detecção de conexão (`hasClient()`) no loop. Qualquer
 diagnóstico extra de rádio foi removido de propósito: em um PC o anúncio do
 "BARCO" não aparecia, e o "LITO" — que só chama `begin()` — aparecia.
 
-## Se o BARCO não aparecer no Bluetooth
+A **única** exceção é `LIMPAR_PAREAMENTOS` (no topo do `barco.ino`):
+
+```cpp
+// Apaga TODOS os pareamentos salvos no ESP32 no boot (útil no teste:
+// garante que o PC faça um pareamento limpo). 1 = apaga, 0 = mantém.
+#define LIMPAR_PAREAMENTOS 1
+```
+
+- **1** (padrão do teste): logo depois do `begin()` o sketch chama
+  `ESP_BT.deleteAllBondedDevices()` e imprime
+  `Pareamentos antigos apagados (faca o pareamento de novo no PC).`
+  O PC precisa ser pareado de novo. É o remédio para bond antigo/corrompido
+  (pareamento "pela metade") no lado do ESP32.
+- **0**: não chama nada (comportamento anterior). **Volte para 0** depois de
+  pareado e funcionando, senão o pareamento é apagado a cada boot.
+
+A chamada fica **depois** do `begin()` de propósito: a API de bond do ESP32 só
+funciona com o Bluetooth já iniciado.
+
+## Se o BARCO não aparecer/conectar no Bluetooth
 
 Siga na ordem — cada passo elimina uma causa:
 
@@ -147,6 +167,23 @@ Siga na ordem — cada passo elimina uma causa:
    `python leitura_mao_barco.py --porta COMx` (veja **Teste sem Bluetooth
    (pelo USB)** acima). Se o USB funciona e o Bluetooth não, o firmware está
    certo — o problema está no anúncio/emparelhamento do PC, não na lógica.
+
+### Aparece, mas fica "Não conectado"
+
+- **"Não conectado" no Windows é NORMAL em SPP.** O vínculo só se estabelece
+  quando **um programa abre a porta COM**; a lista de Bluetooth não mostra
+  "Conectado" antes disso. Depois de parear, confira em `Win+R` →
+  `control printers` → (seu PC) → Configurações de Bluetooth → aba
+  **COM ports** (deve existir "Saída"/"Entrada" do BARCO) ou rode
+  `Get-CimInstance Win32_SerialPort | ? Description -match 'Bluetooth'` e use
+  `python leitura_mao_barco.py --porta COMx` — só então a conexão aparece ativa.
+- **Se não existir porta COM (nenhuma "Standard Serial over Bluetooth link"):
+  o pareamento está pela metade.** Remova o dispositivo no Windows, reinicie o
+  Bluetooth, **regrave o sketch** (ele apaga os pareamentos no boot por causa de
+  `LIMPAR_PAREAMENTOS 1`) e pareie de novo.
+- **Outro aparelho conectado:** a `BluetoothSerial` aceita **um cliente por
+  vez**. Se celular/outro PC estiver conectado ao BARCO, o seu não entra —
+  desconecte o outro (ou desligue o Bluetooth dele).
 
 ## Avisos
 
