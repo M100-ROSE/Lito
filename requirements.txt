@@ -1,0 +1,12 @@
+# Dependências do Lito (controle por gestos + Bluetooth Serial)
+#
+# Ambiente testado: Python 3.14.6 (Windows 11)
+# O código usa a API NOVA do MediaPipe: mediapipe.tasks (HandLandmarker em
+# modo VIDEO), e NÃO a API legada mp.solutions.hands.
+#
+# pyserial é opcional em tempo de execução: sem ele o programa roda só com
+# a câmera (sem enviar comandos ao ESP32), mas é necessário para o uso normal.
+
+mediapipe>=0.10.30,<0.11
+opencv-python>=4.9
+pyserial>=3.5

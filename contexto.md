@@ -23,14 +23,21 @@ câmera e envia comandos via Bluetooth Serial para um ESP32 (sketch Arduino em
    a partir dos 5 booleanos de dedos esticados de cada mão.
 3. **Votação** — `direcao_estavel()` confirma a direção apenas por voto majoritário das
    últimas leituras, eliminando flicker.
-4. **Envio** — `enviar_comando()` envia UMA letra ao ESP32 somente quando a direção
-   confirmada MUDA, com throttle de 0,5 s (`INTERVALO_MINIMO_ENVIO`).
-   Sem Bluetooth conectado (`esp32 = None`), o programa roda só com a câmera e avisa no boot.
+4. **Envio** — `processar_envio()` manda UMA letra ao ESP32 **quando a direção confirmada
+   MUDA** (`INTERVALO_MINIMO_ENVIO = 0,5 s` entre comandos diferentes) e, enquanto o gesto
+   se mantém, **REENVIA a mesma letra a cada `INTERVALO_REENVIO = 0,5 s`** — o sketch tem
+   failsafe de 2 s sem bytes, então o reenvio mantém o comando vivo. O throttle guarda a
+   janela e tenta de novo no frame seguinte (não descarta mais o comando novo) e a "última
+   enviada" só é marcada quando `enviar_comando()` devolve sucesso; falha de escrita
+   derruba o link (`esp32 = None`), avisa uma vez e o programa segue só com a câmera.
 
 ### Arquivos-chave
 
-- `leitura/leitura_mão.py` — programa principal (câmera + gestos + envio serial).
-  - Constantes no topo: `PORTA_BLUETOOTH = "COM4"`, `BAUDRATE = 9600`.
+- `leitura/leitura_mao.py` — programa principal (câmera + gestos + envio serial).
+  - Constantes no topo: `PORTA_BLUETOOTH = "COM4"`, `BAUDRATE = 9600`, `INTERVALO_MINIMO_ENVIO = 0.5`
+    e `INTERVALO_REENVIO = 0.5`.
+  - `main()` + `if __name__ == "__main__"`, com funções `processar_frame`, `carregar_imagens`,
+    `criar_detector`, `conectar_esp32`, `exibir_captura` e `processar_envio`.
   - Caminhos das imagens (`leitura/direcoes/*.jpg`) e do modelo `hand_landmarker.task`
     resolvidos relativos à pasta do script (`PASTA_SCRIPT`, via pathlib), com avisos no
     boot se algo não carregar.
@@ -44,11 +51,21 @@ câmera e envia comandos via Bluetooth Serial para um ESP32 (sketch Arduino em
   `T` → TD+TE, `C` → todos os 4, `B` → nenhum — via `ligarMotores(fd, td, te, fe)` e
   `pararMotores()`, com constantes `MOTOR_FD=25`, `MOTOR_TD=26`, `MOTOR_TE=33`,
   `MOTOR_FE=32` colocadas em `OUTPUT`/`LOW` no início do `setup()`; imprime no Serial e
-  faz blink no LED do pino 2. **Failsafe** de `FAILSAFE_MS = 2000` com `millis()`: sem
-  nenhum byte Bluetooth por 2 s, desliga todos os motores. Para compatibilidade com
-  `testebluetooth.py`, `'1'` acende e `'0'` apaga **apenas o LED** (não tocam nos motores);
-  byte desconhecido apenas avisa.
+  faz blink no LED do pino 2 **sem bloquear** (`ledApagarEm` + desligamento no fim do `loop()`,
+  sem `delay(60)`). Comando **repetido é idempotente e silencioso** (`ultimoComando`): o
+  reenvio de 0,5 s do Python só renova o failsafe, sem reimprimir no Serial nem piscar o LED.
+  **Failsafe** de `FAILSAFE_MS = 2000` com `millis()`: sem nenhum byte Bluetooth por 2 s,
+  desliga todos os motores e **zera `ultimoComando`** (o mesmo gesto pode religar depois).
+  Para compatibilidade com `testebluetooth.py`, `'1'` deixa o LED **aceso em regime** e `'0'`
+  apaga (não tocam nos motores); byte desconhecido apenas avisa. O uso de `hasClient()` foi
+  avaliado e **descartado** (pode retornar `false` logo após reconectar e derrubar os motores);
+  o motivo está documentado em comentário no sketch.
 - `esp32/README.md` — pinos, tabela de comandos, failsafe e como compilar/carregar o sketch.
+- `requirements.txt` — dependências Python fixadas (`mediapipe>=0.10.30,<0.11`,
+  `opencv-python>=4.9`, `pyserial>=3.5`); instalar com `pip install -r requirements.txt`
+  (Python 3.10+, testado em 3.14.6).
+- `.gitattributes` — normaliza fim de linha (`* text=auto eol=lf`) entre Windows/Linux/macOS.
+- `LICENSE` — licença MIT (2026, Kaike, Maria e Marcos — Projeto Lito), referenciada no README.
 - `modelo/drone.glb|.stl|.zip` — modelo 3D do drone.
 - `README.md` — documentação completa em 11 seções: arquitetura (pipeline
   detecção → classificação → votação → envio), seção "A Homenagem" com fotos
@@ -63,7 +80,9 @@ câmera e envia comandos via Bluetooth Serial para um ESP32 (sketch Arduino em
 
 ### Contrato de comandos Bluetooth
 
-Enviados pelo `leitura_mão.py`, um byte por mudança de direção confirmada:
+Enviados pelo `leitura_mao.py`: um byte por mudança de direção confirmada **e reenvio da
+mesma letra a cada 0,5 s** enquanto o gesto se mantém (o sketch trata repetição como
+comando idempotente — só renova o failsafe de 2 s):
 
 | Letra | Direção  |
 |:-----:|:---------|
@@ -74,7 +93,8 @@ Enviados pelo `leitura_mão.py`, um byte por mudança de direção confirmada:
 | `C`   | CIMA     |
 | `B`   | BAIXO    |
 
-Extras mantidos para o `testebluetooth.py`: `'1'` liga o LED, `'0'` desliga.
+Extras mantidos para o `testebluetooth.py`: `'1'` liga o LED (aceso em regime, sobrescrito
+pelo próximo comando de direção), `'0'` desliga.
 Porta no PC: **COM4** (`PORTA_BLUETOOTH`, ajustável no topo do script). Baudrate: **9600**.
 Como descobrir a porta: Gerenciador de Dispositivos → Portas (COM e LPT) → "Standard Serial over Bluetooth link (COMx)".
 
@@ -89,6 +109,62 @@ Como descobrir a porta: Gerenciador de Dispositivos → Portas (COM e LPT) → "
   (no OpenCV o eixo Y cresce para baixo; pulso = landmark 0).
 
 ## Histórico
+
+### 2026-11-18 — Auditoria dos códigos e correções de robustez
+
+**Solicitação**: "verifique caso haja algo para melhorar ou arrumar nos códigos" — e, após a
+auditoria, corrigir TUDO (críticos, médios e baixos).
+
+**O que foi feito**:
+- [x] **Crítico C1/C2 (gesto parado desligava os motores):** `INTERVALO_REENVIO = 0.5` — a
+      direção confirmada passa a ser **reenviada a cada 0,5 s** enquanto o gesto se mantém
+      (o failsafe do ESP32 derruba os motores após 2 s sem bytes). `processar_envio()` só
+      marca a "última enviada" quando `enviar_comando()` confirma o envio, então o throttle
+      não engole mais o comando novo, e falha de escrita marca `esp32 = None` e avisa uma vez.
+- [x] **Crítico C3 (script com acento no nome):** `leitura/leitura_mão.py` renomeado para
+      `leitura/leitura_mao.py` (sem acento) e refatorado em `main()` +
+      `if __name__ == "__main__"`, com `processar_frame`, `carregar_imagens`,
+      `criar_detector`, `conectar_esp32`, `exibir_captura` e `processar_envio`.
+- [x] **Médios:** `import serial` opcional (roda sem pyserial, só com a câmera); checagem da
+      existência do `hand_landmarker.task` antes de criar o detector; timestamp monotônico
+      (`time.perf_counter_ns()`) no modo VIDEO; janelas do OpenCV protegidas
+      (`cv2.getWindowProperty` / `cv2.error`); câmera ausente → `sys.exit(1)`; `try/finally`
+      liberando câmera, janelas e detector; Ctrl+C encerra limpo.
+- [x] **Baixos:** comentário do `BAUDRATE` corrigido (SPP não usa baudrate); polegar
+      classificado por **distância ao pulso** (funciona com a mão girada); suavização
+      resetada após 2 frames sem a mão; desempate da votação pelo **voto mais recente**;
+      stdout reconfigurado para UTF-8 tolerante; `testebluetooth.py` com `with serial.Serial`
+      + `except (Exception, KeyboardInterrupt)` + `finally`.
+- [x] **Sketch `esp32/esp32.ino`:** blink **não bloqueante** (`ledApagarEm` desligado no fim do
+      `loop()`, sem `delay(60)`); `ultimoComando` torna o comando repetido **idempotente e
+      silencioso** (só renova o failsafe); failsafe de 2 s **zera `ultimoComando`**; comentário
+      do LED/GPIO2 (strapping pin, LED para GND com resistor); decisão de **não** usar
+      `hasClient()` documentada em comentário no próprio sketch.
+- [x] **Docs:** `README.md` corrigido no ponto **perigoso** de alimentação (3,3 V do regulador,
+      LiPo na entrada, nunca no pino 3V3 — máx. ~3,6 V) + aviso em 7.8; removidas as afirmações
+      de PWM como estado atual (hoje on/off; PWM e PID foram para o roadmap); "3 etapas" → 4;
+      LED (GPIO2) na tabela de pinos; instalação via `requirements.txt`; contrato documentando o
+      reenvio de 0,5 s e o failsafe de 2 s; árvore do repositório com `requirements.txt` e
+      `LICENSE`; todas as referências ao script atualizadas. `esp32/README.md` idem.
+- [x] **Novos arquivos:** `requirements.txt` (`mediapipe>=0.10.30,<0.11`,
+      `opencv-python>=4.9`, `pyserial>=3.5`), `.gitattributes` (`* text=auto eol=lf`) e
+      `LICENSE` (MIT, 2026). `.gitignore` ganhou `.venv/`, `venv/`, `Thumbs.db`, `.DS_Store`,
+      `*.log` e `build/`.
+- [x] **Validação:** `python -m py_compile` OK nos dois scripts; 3 cenários de teste da lógica
+      de envio OK (gesto mantido 3 s → 7 envios de 0,5 em 0,5 s; troca de direção dentro da
+      janela não se perde; falha de escrita não marca enviado e derruba o link); sketch
+      compila com `arduino-cli` (81% flash, 12% RAM).
+
+**Arquivos alterados**: `leitura/leitura_mão.py` → `leitura/leitura_mao.py` (renomeado e
+refatorado), `leitura/testebluetooth.py`, `esp32/esp32.ino`, `esp32/README.md`, `README.md`,
+`requirements.txt` (novo), `.gitattributes` (novo), `LICENSE` (novo), `.gitignore`, `contexto.md`.
+
+**Pendências**:
+- [ ] Testar em hardware real: câmera + Bluetooth em `COM4` (`PORTA_BLUETOOTH`).
+- [ ] **TESTE SEM HÉLICES** antes de qualquer teste com os motores ligados.
+- [ ] Carregar o sketch `esp32/esp32.ino` na placa (a compilação já está validada).
+- [ ] Instalar as dependências com `pip install -r requirements.txt` (inclui o `pyserial`).
+- [ ] Calibrar a leitura do polegar (distância ao pulso) se oscilar com as mãos reais.
 
 ### 2026-11-18 — Sketch do ESP32 movido para a pasta esp32/
 
@@ -116,8 +192,9 @@ Como descobrir a porta: Gerenciador de Dispositivos → Portas (COM e LPT) → "
 - [ ] Carregar o sketch na placa via IDE Arduino.
 - [ ] Testar com a eletrônica/motores reais, sempre **SEM hélices**.
 - [ ] Migrar de on/off para PWM (controle de velocidade).
-- [ ] Ajustar o comentário de `BAUDRATE = 9600` em `leitura/leitura_mão.py`, que ainda diz
-      "mesmo valor configurado no ESP32".
+- [x] ~~Ajustar o comentário de `BAUDRATE = 9600`~~ — **resolvido em 2026-11-18**: o
+      comentário agora explica que o Bluetooth Serial (SPP) não usa baudrate e que o valor
+      só precisa ser aceito pelo driver da porta COM virtual.
 
 ### 2026-11-18 — Controle dos motores no sketch do ESP32 (modo teste)
 
@@ -160,7 +237,7 @@ promíscuo e atraso de 1 s por byte no ESP32); revisar, documentar em `contexto.
 commitar e enviar.
 
 **O que foi feito**:
-- [x] Corrigido `NameError` no `leitura_mão.py` quando o COM4 não conecta
+- [x] Corrigido `NameError` no `leitura/leitura_mao.py` quando o COM4 não conecta
       (`esp32 = None`; programa roda só com câmera).
 - [x] Envio serial centralizado em `enviar_comando()`, único e só após a votação confirmar
       a direção; `direcao()` ficou pura (só retorna o nome); throttle de 0,5 s.
@@ -179,16 +256,15 @@ commitar e enviar.
 - [x] Teste de lógica com stubs passou (fora do repositório, em pasta temporária).
 - [x] `contexto.md` criado e `.gitignore` adicionado (`__pycache__`, `.opencode/`).
 
-**Arquivos alterados**: `leitura/leitura_mão.py`, `esp32`, `contexto.md` (novo), `.gitignore` (novo).
+**Arquivos alterados**: `leitura/leitura_mao.py`, `esp32`, `contexto.md` (novo), `.gitignore` (novo).
 
 **Pendências**:
 - [ ] Confirmar se a porta do Bluetooth é COM4 (ajustar `PORTA_BLUETOOTH` no topo de
-      `leitura/leitura_mão.py` se não for).
+      `leitura/leitura_mao.py` se não for).
 - [ ] Testar o gesto cima/baixo com as mãos reais (agora é mais rigoroso) e calibrar se precisar.
-- [ ] Compilar/carregar o sketch `esp32` na placa via IDE Arduino (nunca testado).
-      _Atualização 2026-11-18: a COMPILAÇÃO foi validada com `arduino-cli` (core
-      `esp32:esp32 3.3.11`, FQBN `esp32:esp32:esp32`, sem erros); falta apenas carregar
-      na placa._
+- [x] Compilar o sketch `esp32` — **validado** com `arduino-cli` (core `esp32:esp32 3.3.11`,
+      FQBN `esp32:esp32:esp32`, sem erros; recompilado em 2026-11-18 após as correções de
+      blink/failsafe: 81% flash, 12% RAM). A carga na placa segue na entrada de 2026-11-18.
 - [ ] Futuro: comandos de rotação no próprio eixo (horário/anti-horário) citados no README.
 
 ### 2026-10-24 — Reescrita completa do README
@@ -216,14 +292,14 @@ de mãos em homenagem ao Lito Sousa (canal Aviões e Músicas).
       de segurança reorganizadas na seção de Hardware.
 - [x] Seção Modelo 3D (`modelo/drone.glb|.stl|.zip`) e guia "Como Executar"
       (dependências pip, carregar sketch na IDE Arduino, emparelhar "LITO",
-      porta COM4, rodar `leitura/leitura_mão.py`).
+      porta COM4, rodar `leitura/leitura_mao.py`).
 - [x] Roadmap atualizado (rotação no próprio eixo; vídeos pós-feira).
 
 **Arquivos alterados**: `README.md`, `contexto.md`.
 
 **Pendências**:
 - [ ] Confirmar se a porta do Bluetooth é COM4 (ajustar `PORTA_BLUETOOTH` no topo de
-      `leitura/leitura_mão.py` se não for).
+      `leitura/leitura_mao.py` se não for).
 - [ ] Testar o gesto cima/baixo com as mãos reais (agora é mais rigoroso) e calibrar se precisar.
 - [ ] Compilar/carregar o sketch `esp32` na placa via IDE Arduino (nunca testado).
 - [ ] Futuro: comandos de rotação no próprio eixo (horário/anti-horário) citados no README.
@@ -251,7 +327,7 @@ de mãos em homenagem ao Lito Sousa (canal Aviões e Músicas).
 
 **Pendências**:
 - [ ] Confirmar se a porta do Bluetooth é COM4 (ajustar `PORTA_BLUETOOTH` no topo de
-      `leitura/leitura_mão.py` se não for).
+      `leitura/leitura_mao.py` se não for).
 - [ ] Testar o gesto cima/baixo com as mãos reais (agora é mais rigoroso) e calibrar se precisar.
 - [ ] Compilar/carregar o sketch `esp32` na placa via IDE Arduino (nunca testado).
 - [ ] Futuro: comandos de rotação no próprio eixo (horário/anti-horário) citados no README.

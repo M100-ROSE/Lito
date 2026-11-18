@@ -82,20 +82,19 @@ espírito que os alunos do 1ºDSB colocam este drone no ar.
 
 ## 4. 📡 Como Funciona
 
-O sistema funciona em uma cadeia de 3 etapas, da câmera até o ESP32:
+O sistema funciona em uma cadeia de 4 etapas, da câmera até o ESP32:
 
 ```text
 ┌──────────────┐    ┌────────────────────────────────┐    ┌────────────────────┐
-│ Câmera do PC │───▶│ Python (leitura_mão.py)        │───▶│ Bluetooth Serial   │
+│ Câmera do PC │───▶│ Python (leitura_mao.py)        │───▶│ Bluetooth Serial   │
 │   (webcam)   │    │ 1. DETECÇÃO: MediaPipe         │    │ (porta COM do PC)  │
 └──────────────┘    │    HandLandmarker acha 2 mãos  │    └─────────┬──────────┘
                     │ 2. CLASSIFICAÇÃO: OpenCV       │              ▼
                     │    analisa dedos esticados     │    ┌────────────────────┐
                     │ 3. VOTAÇÃO: voto majoritário   │    │ ESP32-WROOM-32     │
-                    │    confirma a direção          │    │ aciona o comando   │
-                    │ 4. ENVIO: 1 letra na mudança   │    │ (hoje: LED pino 2; │
-                    └────────────────────────────────┘    │ amanhã: motores)   │
-                                                          └────────────────────┘
+                    │    confirma a direção          │    │ motores on/off +   │
+                    │ 4. ENVIO: letra a cada 0,5 s   │    │ LED pino 2         │
+                    └────────────────────────────────┘    └────────────────────┘
 ```
 
 **Em detalhe:**
@@ -106,8 +105,9 @@ O sistema funciona em uma cadeia de 3 etapas, da câmera até o ESP32:
    e a função `direcao()` decide qual gesto está sendo feito.
 3. **Votação** — `direcao_estavel()` confirma a direção apenas por **voto majoritário**
    das últimas leituras, eliminando o "flicker" de frames mal classificados.
-4. **Envio** — uma **única letra** é enviada ao ESP32 somente quando a direção confirmada
-   **muda**, com um intervalo mínimo de 0,5 s entre envios.
+4. **Envio** — uma **única letra** é enviada ao ESP32 quando a direção confirmada
+   **muda** e, enquanto o gesto se mantém, a **mesma letra é reenviada a cada 0,5 s**
+   (o sketch desliga os motores após 2 s sem bytes — o reenvio mantém o comando vivo).
    Sem Bluetooth conectado, o programa roda normal, apenas mostrando a câmera.
 
 ---
@@ -133,7 +133,8 @@ abaixo ficam em `leitura/direcoes/` e são exibidas na tela durante o uso:
 
 ## 6. 🔊 Contrato Bluetooth
 
-O `leitura_mão.py` envia **um byte (uma letra)** ao ESP32 a cada mudança de direção confirmada:
+O `leitura_mao.py` envia **um byte (uma letra)** ao ESP32 a cada mudança de direção
+confirmada e **reenvia a mesma letra a cada 0,5 s** enquanto o gesto se mantém:
 
 | Letra | Direção  | Efeito nos motores (modo de teste) |
 |:-----:|:---------|:-----------------------------------|
@@ -147,14 +148,19 @@ O `leitura_mão.py` envia **um byte (uma letra)** ao ESP32 a cada mudança de di
 > ⚠️ **Modo de teste (on/off):** nesta etapa cada letra apenas **liga/desliga** os
 > motores via MOSFETs IRLB4132 — **não há PWM** nem controle de velocidade. O sketch
 > (`esp32/esp32.ino`) também desliga todos os motores (**failsafe**) se ficar mais de
-> 2 s sem nenhum byte do Bluetooth. **Teste sempre os motores SEM hélices.**
+> 2 s sem nenhum byte do Bluetooth — por isso o Python **reenvia a letra a cada 0,5 s**
+> enquanto o gesto se mantém. **Teste sempre os motores SEM hélices.**
 
 **Extras de teste** (usados pelo `leitura/testebluetooth.py`):
 
 | Letra | Ação |
 |:-----:|:-----|
-| `1`   | **Liga** o LED de feedback (pino 2) |
+| `1`   | **Liga** o LED de feedback (pino 2) e o deixa **aceso em regime** |
 | `0`   | **Desliga** o LED de feedback (pino 2) |
+
+> O `'1'` deixa o LED **aceso fixo** (não é só um pisca) e esse estado é **sobrescrito pelo
+> próximo comando de direção**, que volta ao pulso normal de 60 ms por comando novo.
+> Nenhum dos dois comandos altera o estado dos motores.
 
 **Configuração da conexão:**
 
@@ -216,11 +222,14 @@ O `leitura_mão.py` envia **um byte (uma letra)** ao ESP32 a cada mudança de di
 
 #### ESP32-WROOM-32
 
-- **Função:** é o cérebro do drone. Processa os dados dos sensores, calcula a correção
-  de estabilidade (PID) e gera os sinais PWM para os motores. Também permite controle
-  via Bluetooth.
+- **Função:** é o cérebro do drone. Hoje recebe os comandos de direção e **liga/desliga
+  os motores** (on/off no gate dos MOSFETs), além do LED de feedback. O cálculo de
+  estabilidade (PID) e os sinais **PWM** para variar a velocidade dos motores ainda
+  estão no roadmap (seção 10). Também permite controle via Bluetooth.
 - **Onde fica:** no centro do quadro, bem fixo e nivelado.
-- **Alimentação:** entre 3,5 V e 4,1 V, vindas da bateria.
+- **Alimentação:** pelos **3,3 V do regulador** — a LiPo vai na **entrada** do regulador,
+  nunca direto no pino 3V3 do ESP32 (o máximo absoluto do 3V3 é ~3,6 V). Veja o
+  [Fluxo de Energia (7.7)](#77-fluxo-de-energia-resumo-visual).
 
 ---
 
@@ -258,13 +267,14 @@ O `leitura_mão.py` envia **um byte (uma letra)** ao ESP32 a cada mudança de di
 
 #### MOSFETs IRLB4132 (1 por motor)
 
-- **Função:** funcionam como "chaves eletrônicas" que ligam e desligam os motores
-  rapidamente (controle por PWM).
+- **Função:** funcionam como "chaves eletrônicas" que ligam e desligam os motores.
+  Hoje o controle é **on/off** (nível HIGH/LOW no gate); a variação de velocidade por
+  **PWM** está no roadmap (seção 10).
 - **Onde ficam:** perto de cada motor ou em uma placa central.
 - **Ligação de cada MOSFET:**
   - `Drain` → fio negativo do motor;
   - `Source` → GND;
-  - `Gate` → resistor de 100~220 Ω → pino PWM do ESP32.
+  - `Gate` → resistor de 100~220 Ω → pino do ESP32 (saída digital, hoje on/off).
 - **Sigla:** MOSFET = *Metal-Oxide-Semiconductor Field-Effect Transistor*.
 
 #### Diodos 1N4148 (1 por motor)
@@ -291,6 +301,7 @@ O `leitura_mão.py` envia **um byte (uma letra)** ao ESP32 a cada mudança de di
 | Motor 2 (Trás Direita) | GPIO 26 | Gate do MOSFET 2 |
 | Motor 3 (Trás Esquerda) | GPIO 33 | Gate do MOSFET 3 |
 | Motor 4 (Frente Esquerda) | GPIO 32 | Gate do MOSFET 4 |
+| LED de feedback | GPIO 2 | LED + resistor (acende com `1`, apaga com `0`) |
 
 ---
 
@@ -321,6 +332,7 @@ Bateria LiPo (3,7~4,2 V)
 ### 7.8 ⚠️ Observações Finais de Segurança
 
 - Sempre teste os motores **sem hélices** primeiro.
+- **Nunca** ligue a LiPo direto no pino 3V3: o ESP32 só pode receber os 3,3 V do regulador.
 - Use tubo termorretrátil em **todas as soldas**.
 - Mantenha os fios de potência (24 AWG) o mais **curtos** possível.
 - O sensor VL53L0X principal deve apontar para **baixo** (controle de altura).
@@ -344,18 +356,21 @@ O desenho 3D do **chassi/corpo do drone** está na pasta `modelo/`:
 
 ### 9.1 Requisitos
 
-- **Python 3** instalado no computador;
+- **Python 3.10 ou mais novo** instalado no computador (**3.14 testado**);
 - **Webcam** funcionando;
 - PC **com Bluetooth** integrado ou adaptador externo;
 - Placa **ESP32** com o sketch carregado.
 
 ### 9.2 Instalação
 
-Instale as dependências Python:
+Na raiz do repositório, instale as dependências de uma vez com o `requirements.txt`:
 
 ```bash
-pip install opencv-python mediapipe pyserial
+pip install -r requirements.txt
 ```
+
+> 💡 O `requirements.txt` fixa `mediapipe>=0.10.30,<0.11`, `opencv-python>=4.9` e
+> `pyserial>=3.5` — testado em Python 3.14.
 
 ### 9.3 Passo a passo
 
@@ -365,11 +380,11 @@ pip install opencv-python mediapipe pyserial
 2. **Emparelhe o "LITO"** no Windows e descubra a porta COM (dica na seção
    [Contrato Bluetooth](#6--contrato-bluetooth)).
 3. **Ajuste a porta**, se necessário: edite a constante `PORTA_BLUETOOTH` no topo de
-   `leitura/leitura_mão.py` (padrão: `COM4`).
+   `leitura/leitura_mao.py` (padrão: `COM4`).
 4. **Rode o programa de reconhecimento de gestos:**
 
 ```bash
-python "leitura/leitura_mão.py"
+python leitura/leitura_mao.py
 ```
 
 > 💡 Para testar só o Bluetooth, rode `python leitura/testebluetooth.py` e envie `1`/`0`
@@ -383,7 +398,7 @@ Lito/
 │   ├── esp32.ino                 # sketch Arduino: motores on/off + failsafe
 │   └── README.md                 # pinos, comandos e como compilar/carregar
 ├── leitura/
-│   ├── leitura_mão.py            # programa principal: câmera + gestos + envio serial
+│   ├── leitura_mao.py            # programa principal: câmera + gestos + envio serial
 │   ├── testebluetooth.py         # teste manual da conexão Bluetooth ('1'/'0')
 │   ├── hand_landmarker.task      # modelo do MediaPipe Hand Landmarker
 │   └── direcoes/                 # imagens de referência dos gestos
@@ -397,6 +412,8 @@ Lito/
 │   ├── drone.glb                 # modelo 3D (visualização)
 │   ├── drone.stl                 # modelo 3D (impressão)
 │   └── drone.zip                 # pacote do modelo
+├── requirements.txt              # dependências Python (versões testadas)
+├── LICENSE                       # licença MIT
 └── README.md                     # este arquivo
 ```
 
@@ -404,6 +421,8 @@ Lito/
 
 ## 10. 🗺️ Roadmap
 
+- [ ] **Controle de velocidade (PWM) nos motores** — hoje é on/off; próximo passo;
+- [ ] **PID de estabilidade** com o MPU6050, para o voo automático;
 - [ ] **Rotação no próprio eixo** (sentido horário e anti-horário) — planejada;
 - [ ] **Vídeos de funcionamento** — a anexar após a feira de ciências.
 
@@ -417,3 +436,5 @@ Inspirado e realizado como tributo ao canal
 [**Aviões e Músicas**](https://www.youtube.com/@AvioesEMusicas) — *"Saudações Aeronáuticas!"* 🚁
 
 **Conheça o canal:** [YouTube](https://www.youtube.com/@AvioesEMusicas) · [Site](https://www.avioesemusicas.com) · [Instagram](https://www.instagram.com/lito) (@lito)
+
+Este projeto é distribuído sob a **licença MIT** — veja o arquivo [LICENSE](LICENSE) para o texto completo.

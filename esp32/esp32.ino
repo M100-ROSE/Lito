@@ -1,13 +1,18 @@
 // ------------------------------------------------------------------
 // Lito - ESP32 (receptor de comandos por gestos via Bluetooth Serial)
 //
-// O Python (leitura/leitura_mao.py) envia UMA letra por mudança de
-// direção confirmada:
+// O Python (leitura/leitura_mao.py) envia UMA letra por mensagem e repete
+// a MESMA letra a cada ~0,5 s enquanto o gesto continua confirmado (para
+// renovar o failsafe). Comando repetido é IDEMPOTENTE e SILENCIOSO aqui:
+// só renova ultimoByteMs, sem reimprimir no Serial e sem piscar o LED.
+//
+// Letras de direção:
 //   'T' -> TRÁS      'F' -> FRENTE
 //   'E' -> ESQUERDA  'D' -> DIREITA
 //   'C' -> CIMA      'B' -> BAIXO
-// Mantemos também os comandos antigos      '1' -> LED liga
-// criados para o testebluetooth.py:        '0' -> LED desliga
+//
+// Comandos antigos de teste (criados para o testebluetooth.py):
+//   '1' -> LED liga (regime)     '0' -> LED desliga
 //
 // --------------------------------------------------------------
 // MODO DE TESTE (on/off) DOS 4 MOTORES
@@ -37,10 +42,12 @@
 //  - FAILSAFE: se passar mais de FAILSAFE_MS (2000 ms) sem receber
 //    NENHUM byte pelo Bluetooth, todos os motores são desligados.
 //    Assim, se o PC cair / o sinal sumir, o drone não fica com motor
-//    ligado sozinho.
+//    ligado sozinho. (O Python reenvia a letra a cada 0,5 s justamente
+//    para manter esse relógio vivo durante um gesto parado.)
 //
 // O loop continua com delay(20) e esvazia TODOS os bytes disponíveis
-// por passo, para não atrasar os comandos.
+// por passo, para não atrasar os comandos. Nenhum delay() é usado para
+// piscar o LED (blink é não bloqueante).
 // ------------------------------------------------------------------
 
 #include "BluetoothSerial.h" // Biblioteca padrão do ESP32
@@ -48,6 +55,9 @@
 BluetoothSerial ESP_BT;
 
 // --- Pinos ---
+// GPIO2 é um strapping pin do ESP32 (precisa estar em nível baixo/float no
+// boot). Para não interferir no boot, ligue o LED do pino 2 ao GND através
+// de um resistor (ex.: 220 Ω-1 kΩ) e NUNCA direto no 3V3.
 const int LED = 2;
 
 // Motores (Gate dos MOSFETs IRLB4132): HIGH = ligado, LOW = desligado
@@ -64,6 +74,13 @@ const unsigned long FAILSAFE_MS = 2000;
 
 // Instante (millis) do último byte recebido pelo Bluetooth
 unsigned long ultimoByteMs = 0;
+
+// Instante (millis) em que o pulso do LED deve apagar (0 = nada pendente)
+unsigned long ledApagarEm = 0;
+
+// Último comando processado. Serve para tratar comandos repetidos de forma
+// idempotente e silenciosa (o Python reenvia a mesma letra a cada 0,5 s).
+char ultimoComando = 0;
 
 // Guarda se algum motor está ligado, para o failsafe saber se precisa agir
 bool motoresLigados = false;
@@ -88,12 +105,12 @@ void pararMotores() {
   ligarMotores(false, false, false, false);
 }
 
-// Pisca rápido o LED uma vez, para dar feedback visível do comando
-// recebido. Termina com o LED apagado (pulso curto, não trava o loop).
+// Pisca o LED por BLINK_MS sem bloquear o loop: só acende e agenda o
+// instante de apagar, que é verificado no fim do loop(). Assim os bytes
+// do Bluetooth continuam sendo lidos durante o pulso.
 void blinkRapido() {
   digitalWrite(LED, HIGH);
-  delay(BLINK_MS);
-  digitalWrite(LED, LOW);
+  ledApagarEm = millis() + BLINK_MS;
 }
 
 void setup() {
@@ -120,6 +137,13 @@ void loop() {
   while (ESP_BT.available()) {
     char sinalRecebido = ESP_BT.read(); // Lê o caractere enviado
     ultimoByteMs = millis();            // qualquer byte reinicia o failsafe
+
+    // Comando repetido (o Python reenvia a mesma letra a cada ~0,5 s):
+    // já está aplicado, então só renova o failsafe — sem Serial e sem LED.
+    if (sinalRecebido == ultimoComando) {
+      continue;
+    }
+    ultimoComando = sinalRecebido;
 
     Serial.print("Sinal recebido: ");
     Serial.println(sinalRecebido);
@@ -159,12 +183,16 @@ void loop() {
 
       // --- comandos antigos de teste do LED (testebluetooth.py) ---
       // Não alteram o estado dos motores: controlam só o LED do pino 2.
+      // '1' deixa o LED ACESO em regime (não é só um pisca); o próximo
+      // comando de direção sobrescreve esse estado com o blink do gesto.
       case '1':
         digitalWrite(LED, HIGH);
+        ledApagarEm = 0; // cancela pulso pendente: '1' é LED fixo
         Serial.println("LED ligado (motores não foram alterados)");
         break;
       case '0':
         digitalWrite(LED, LOW);
+        ledApagarEm = 0; // cancela pulso pendente
         Serial.println("LED desligado (motores não foram alterados)");
         break;
 
@@ -180,7 +208,26 @@ void loop() {
   // sinal (pararMotores() zera motoresLigados), para não inundar o Serial.
   if (motoresLigados && (millis() - ultimoByteMs >= FAILSAFE_MS)) {
     pararMotores();
+    // esquece o último comando: se o mesmo gesto chegar de novo (ex.: PC
+    // voltou de uma suspensão), ele precisa religar os motores
+    ultimoComando = 0;
     Serial.println("FAILSAFE: sem sinal Bluetooth, motores desligados.");
+  }
+
+  // Alternativa opcional (NÃO usada): desligar os motores quando não há
+  // cliente Bluetooth conectado, com algo como
+  //
+  //   if (motoresLigados && !ESP_BT.hasClient()) { pararMotores(); }
+  //
+  // Motivo de não usar: hasClient() pode retornar false por alguns
+  // instantes logo após emparelhar/reconectar, o que derrubaria os motores
+  // no meio de um teste válido. O failsafe por tempo (acima) já cobre o
+  // caso real de perda de sinal, sem esse risco.
+
+  // --- Blink não bloqueante do LED (nada de delay()) ---
+  if (ledApagarEm && (long)(millis() - ledApagarEm) >= 0) {
+    digitalWrite(LED, LOW);
+    ledApagarEm = 0;
   }
 
   delay(20); // loop rápido: comandos chegam sem atraso perceptível

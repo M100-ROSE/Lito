@@ -2,8 +2,20 @@
 __pycache__/
 *.py[cod]
 
+# Ambientes virtuais
+.venv/
+venv/
+
 # Config local do OpenCode
 .opencode/
 
 # Ambiente / segredos
 .env
+
+# Lixo de sistema / editor
+Thumbs.db
+.DS_Store
+*.log
+
+# Artefatos de build
+build/
