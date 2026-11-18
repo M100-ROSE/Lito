@@ -71,27 +71,40 @@ câmera e envia comandos via Bluetooth Serial para um ESP32 (sketch Arduino em
     estado confirmado, de `leitura/direcoes/`: `baixo.jpg` quando `'A'` (pino 25 ligado)
     e `esquerda.jpg` quando `'F'` ou quando ainda não há envio confirmado (`None`);
     imagem faltando só gera aviso e fechar a janela no "X" não derruba o programa.
+    Linha de comando (`argparse`): `--porta COMx` (padrão `PORTA_BLUETOOTH` = COM4),
+    `--baud N` e `--listar` (usa `serial.tools.list_ports` e sai sem abrir a câmera).
+    Baud automático: porta padrão 9600 (Bluetooth); qualquer outra porta 115200 (o mesmo
+    do `Serial.begin` do sketch). `conectar_esp32(porta, baud)` avisa o motivo da falha
+    e o HUD mostra `PORT: COMx` ou `PORT: sem link (COMx)`; sem link segue só com a câmera.
   - `barco/barco.ino` — receptor Bluetooth Serial **"BARCO"** (não conflita com o "LITO"):
     `PINO_SAIDA = 25` em LOW no topo do `setup()`, `'A'` → HIGH, `'F'` → LOW, comando
     repetido idempotente/silencioso, LED 2 não bloqueante e `FAILSAFE_MS = 2000` (zera
     `ultimoComando`). Sem PWM: é só liga/desliga.
-    **Diagnóstico de boot** (`imprimirDiagnostico()`): imprime core Arduino-ESP32, ESP-IDF,
-    modelo/revisão/núcleos do chip, **MAC Bluetooth** (`esp_read_mac(ESP_MAC_BT)`) e heap
-    livre — serve para provar qual firmware está gravado. `iniciarBluetooth()` checa o
-    retorno `bool` de `ESP_BT.begin("BARCO")`: se falhar, imprime `FALHOU`, agenda nova
-    tentativa a cada `BT_RETRY_MS = 3000` (com `ESP_BT.end()`) e **não trava o loop**;
-    se der certo, reforça o modo descobrível com `esp_bt_gap_set_scan_mode(...)` (o core
-    3.3.11 não tem `setDeviceName()/setDiscoverable()`), imprime o `esp_err_t` e os
-    dispositivos pareados (`getNumberOfBondedDevices()`). Transições de `hasClient()`
-    (`Cliente Bluetooth CONECTADO/DESCONECTADO`) aparecem **uma vez** cada, só como
-    observabilidade — o failsafe não depende de conexão. Bytes fora de `'A'`/`'F'`
-    (`\n`, `\r`, lixo) são ignorados e **não** renovam o failsafe.
-    `BluetoothSerial` está depreciada no core 3.3.11: o aviso é silenciado com
-    `#pragma GCC diagnostic` só na linha da declaração.
+    **Bluetooth voltou ao esquema simples do `esp32/esp32.ino`** (que funciona no PC):
+    só `BluetoothSerial ESP_BT;` e `ESP_BT.begin("BARCO")` no `setup()` — sem checar
+    retorno, sem retry/`ESP_BT.end()`, sem `esp_bt_gap_set_scan_mode()`, sem
+    `getNumberOfBondedDevices()`, sem MAC/`esp_read_mac()` e sem `hasClient()` no loop.
+    Motivo: em um PC específico o anúncio do "BARCO" não aparecia enquanto o "LITO" (que
+    só chama `begin()`) aparecia; todo o diagnóstico extra de rádio foi removido de
+    propósito. `imprimirDiagnostico()` ficou só com 2 linhas de texto (core + modelo do
+    chip) e não faz nenhuma chamada de rádio.
+    **Duas origens de comando**, com a MESMA lógica (`processarComando()`): Bluetooth
+    (`ESP_BT`) e **Serial USB** (`Serial`, 115200), consumidas por
+    `processarFonte(Stream&, origem)` no `loop()`. O boot avisa
+    "Controle por USB (Serial) tambem ativo: A/F" e pede para fechar o Monitor Serial
+    (a porta COM é exclusiva). Serve para testar sem emparelhar nada.
+    Bytes fora de `'A'`/`'F'` (`\n`, `\r`, lixo) são ignorados e **não** renovam o
+    failsafe, valendo para as duas origens. `BluetoothSerial` está depreciada no core
+    3.3.11: o aviso é silenciado com `#pragma GCC diagnostic` (cosmético) só na linha da
+    declaração.
   - `barco/README.md` — pinos, protocolo A/F, como rodar, firmware e avisos; traz a seção
-    **"Se o BARCO não aparecer no Bluetooth"** (7 passos: gravar de verdade, Monitor Serial
-    115200, cabo com dados, procurar em "Adicionar dispositivo", brownout, chip sem BT
-    Classic, mensagem de `FALHOU`) e a saída exata esperada no Monitor Serial.
+    **"Teste sem Bluetooth (pelo USB)"** (gravar, fechar o Monitor Serial, achar a COM do
+    CP210x/CH340 ou usar `--listar`, rodar com `--porta COMx`, o que deve acontecer) e a
+    seção **"Se o BARCO não aparecer no Bluetooth"** (8 passos: gravar de verdade,
+    Monitor Serial 115200, cabo com dados, Windows 11 24H2/25H2 com "Mostrar todos os
+    dispositivos"/descoberta Avançado e remoção de pareamentos antigos em Configurações e
+    em `control printers`, teste com fone Bluetooth para provar Classic no PC, brownout,
+    chip sem BT Classic, plano B pelo USB).
 - `requirements.txt` — dependências Python fixadas (`mediapipe>=0.10.30,<0.11`,
   `opencv-python>=4.9`, `pyserial>=3.5`); instalar com `pip install -r requirements.txt`
   (Python 3.10+, testado em 3.14.6).
@@ -140,6 +153,51 @@ Como descobrir a porta: Gerenciador de Dispositivos → Portas (COM e LPT) → "
   (no OpenCV o eixo Y cresce para baixo; pulso = landmark 0).
 
 ## Histórico
+
+### 2026-11-18 — Barco: Bluetooth simplificado e teste por USB
+
+**Solicitação**: em outros PCs o "BARCO" aparece, mas no PC do usuário não; copiar a parte
+de Bluetooth do `esp32/esp32.ino` (LITO), que funciona. Também foi pedido um modo de teste
+pela serial USB.
+
+**O que foi feito**:
+- [x] `barco/barco.ino`: Bluetooth **idêntico ao `esp32/esp32.ino`** — só
+      `ESP_BT.begin("BARCO")` no `setup()`. Removidos `esp_bt_gap_set_scan_mode()`,
+      `getNumberOfBondedDevices()`, retry com `ESP_BT.end()` (`BT_RETRY_MS`/`btPronto`),
+      `hasClient()` no loop, `esp_read_mac()`/MAC e o bloco de diagnóstico pesado;
+      `imprimirDiagnostico()` ficou com 2 linhas de texto (core + modelo do chip).
+      O `#pragma GCC diagnostic` do aviso de deprecação do `BluetoothSerial` foi mantido
+      (cosmético, não toca no rádio).
+- [x] `barco/barco.ino`: A/F aceitos também pelo **Serial USB**. Lógica centralizada em
+      `processarComando(char, origem)` e `processarFonte(Stream&, origem)`, chamada para
+      `ESP_BT` e para `Serial` no `loop()`; boot avisa que o USB está ativo e pede para
+      fechar o Monitor Serial. Protocolo, `'A'`/`'F'` idempotentes/silenciosos, lixo sem
+      renovar failsafe, pino 25 em LOW no topo do `setup()`, LED 2 não bloqueante,
+      `FAILSAFE_MS = 2000` e `delay(20)` **mantidos**.
+- [x] `barco/leitura_mao_barco.py`: `argparse` com `--porta COMx` (padrão
+      `PORTA_BLUETOOTH` = COM4), `--baud N` e `--listar` (usa `serial.tools.list_ports` e
+      sai sem abrir a câmera). Baud automático (9600 na porta padrão, 115200 nas demais);
+      `conectar_esp32(porta, baud)` com mensagens claras; HUD mostra `PORT: COMx` ou
+      "sem link"; falha ao abrir segue só com a câmera, sem crash. Detecção, votação 4/5,
+      reenvio de 0,5 s, imagens baixo/esquerda e teclas s/q não mudaram.
+- [x] `barco/README.md`: nova seção "Teste sem Bluetooth (pelo USB)"; "Se o BARCO não
+      aparecer no Bluetooth" reescrita sem os diagnósticos removidos, com o passo a passo
+      de Windows 11 (botão "Mostrar todos os dispositivos"/descoberta Avançado em
+      24H2/25H2, remover pareamentos antigos em Configurações e em `control printers`,
+      testar um fone Bluetooth e usar `--porta COMx` como plano B).
+- [x] Validação: `py_compile` OK; 17 checagens com serial falsa OK (COM4/9600,
+      `--porta COM5`/115200, `--baud`, porta com erro, reenvio de 0,5 s, `--listar`);
+      `arduino-cli compile --fqbn esp32:esp32:esp32 --warnings all barco` OK
+      (1.062.804 B flash / 81%, 41.892 B RAM / 12%), sem erros nem avisos.
+
+**Arquivos alterados**: `barco/barco.ino`, `barco/leitura_mao_barco.py`, `barco/README.md`,
+`contexto.md`.
+
+**Pendências**:
+- [ ] Testar no PC do usuário: gravar o sketch, conferir o "BARCO" em *Adicionar
+      dispositivo* e, se preciso, validar o caminho USB com `--porta COMx`.
+- [ ] Se ainda não aparecer, revisar a descoberta do Windows (24H2/25H2) e apagar
+      pareamentos antigos (`BARCO` em Configurações e portas SPP em `control printers`).
 
 ### 2026-11-18 — Barco: diagnóstico de Bluetooth que não anuncia
 

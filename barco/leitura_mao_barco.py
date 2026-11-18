@@ -18,6 +18,16 @@ tem failsafe: sem nenhum byte por 2 s ele desliga a saída sozinho.
 Sem Bluetooth conectado o programa continua rodando com a câmera; apenas
 não envia comandos (avisa uma vez, sem travar).
 
+PORTA / CANAL (o mesmo protocolo, só muda o caminho até o ESP32):
+
+    python leitura_mao_barco.py                 # Bluetooth (PORTA_BLUETOOTH, COM4)
+    python leitura_mao_barco.py --porta COM5    # USB do ESP32 (cabo de dados)
+    python leitura_mao_barco.py --listar        # só mostra as COM disponíveis
+
+No modo USB, FECHE o Monitor Serial da Arduino IDE: a porta COM é
+exclusiva (o Windows não abre duas vezes) e o que você digitar no monitor
+vira comando para o firmware.
+
 Além da janela do vídeo, uma janela separada ("estado") mostra a imagem de
 referência do estado confirmado: `baixo.jpg` quando o estado é 'A'
 (pino 25 ligado) e `esquerda.jpg` quando é 'F' (pino 25 desligado). Antes
@@ -26,6 +36,7 @@ porque nesse momento nada está sendo enviado. As imagens vêm de
 `leitura/direcoes/` e são apenas ilustrativas.
 """
 
+import argparse
 import collections
 import pathlib
 import sys
@@ -56,7 +67,8 @@ except ImportError:  # pragma: no cover - depende do ambiente do usuário
 # CONSTANTES DE AJUSTE (calibre aqui)
 # =====================================================================
 
-# --- conexão Bluetooth Serial -----------------------------------------
+# --- conexão serial ---------------------------------------------------
+# Padrão: Bluetooth Serial (SPP).
 # Gerenciador de Dispositivos -> Portas (COM e LPT) ->
 # "Standard Serial over Bluetooth link (COMx)". Troque "COM4" pelo COMx
 # que aparecer no SEU PC (o do ESP32 emparelhado como "BARCO").
@@ -66,6 +78,11 @@ PORTA_BLUETOOTH = "COM4"
 # ser aceito pelo driver da porta COM virtual. Mantido em 9600 como no
 # restante do projeto.
 BAUDRATE = 9600
+
+# Modo USB (--porta COMx): aqui o baudrate IMPORTA, porque a ponte
+# USB-serial do ESP32 é configurada nele. Precisa ser o mesmo do
+# Serial.begin() do firmware (barco.ino usa 115200).
+BAUDRATE_USB = 115200
 
 # --- protocolo ---------------------------------------------------------
 LETRA_ABERTAS = "A"    # duas mãos abertas  -> pino 25 LIGA
@@ -141,8 +158,18 @@ largura_atual = 0
 # ESTADO GLOBAL
 # =====================================================================
 
-# Conexão serial (None = sem Bluetooth, modo somente câmera).
+# Conexão serial (None = sem link, modo somente câmera).
 esp32 = None
+
+# Porta pedida na linha de comando (padrão: a do Bluetooth).
+porta_pedida = PORTA_BLUETOOTH
+
+# Baudrate efetivamente usado ao abrir a porta.
+baudrate_em_uso = BAUDRATE
+
+# Porta realmente aberta (None = link não estabelecido). É o que o HUD
+# mostra: "PORT: COM5" ou "PORT: sem link".
+porta_em_uso = None
 
 # Evita repetir a mensagem de link morto a cada frame.
 aviso_link_morto = False
@@ -177,30 +204,43 @@ COR_CINZA = (180, 180, 180)
 # =====================================================================
 # COMUNICAÇÃO SERIAL
 # =====================================================================
-def conectar_esp32():
-    """Abre a porta serial do Bluetooth, se possível.
+def conectar_esp32(porta=None, baudrate=None):
+    """Abre a porta serial informada (Bluetooth por padrão, ou USB).
 
+    Sem argumentos usa PORTA_BLUETOOTH/BAUDRATE, como antes.
     Falha de conexão (ou pyserial ausente) NÃO é fatal: o teste segue em
-    modo somente câmera. Avisa uma única vez.
+    modo somente câmera. Avisa uma única vez, com o motivo e as dicas.
     """
-    global esp32, aviso_link_morto
+    global esp32, aviso_link_morto, porta_em_uso, baudrate_em_uso
+
+    porta = PORTA_BLUETOOTH if porta is None else porta
+    if baudrate is None:
+        baudrate = BAUDRATE if porta == PORTA_BLUETOOTH else BAUDRATE_USB
 
     if serial is None:
         esp32 = None
+        porta_em_uso = None
         aviso_link_morto = True
         print("AVISO: pyserial não instalado (pip install pyserial). "
               "Rodando só com a câmera: nenhuma letra será enviada.")
         return
 
     try:
-        esp32 = serial.Serial(PORTA_BLUETOOTH, BAUDRATE, timeout=1)
-        print(f"Conectado ao barco na porta {PORTA_BLUETOOTH}.")
-        time.sleep(2)
+        esp32 = serial.Serial(porta, baudrate, timeout=1)
+        porta_em_uso = porta
+        baudrate_em_uso = baudrate
+        print(f"Conectado ao barco na porta {porta} ({baudrate} baud).")
+        time.sleep(2)  # dá tempo do ESP32 sair do reset provocado ao abrir
     except Exception as e:
         esp32 = None
+        porta_em_uso = None
         aviso_link_morto = True
-        print(f"Sem conexão Bluetooth ({e}). Rodando SOMENTE CÂMERA "
-              f"(ajuste PORTA_BLUETOOTH se o COM mudou).")
+        print(f"Não foi possível abrir a porta {porta}: {e}")
+        print("  -> Rodando SOMENTE CÂMERA (nenhuma letra será enviada).")
+        print("  -> Bluetooth: confira PORTA_BLUETOOTH / se o 'BARCO' está "
+              "pareado.")
+        print("  -> USB: FECHE o Monitor Serial e use a COM do ESP32 "
+              "(veja com --listar).")
 
 
 def enviar_comando(letra):
@@ -209,11 +249,11 @@ def enviar_comando(letra):
     Nunca lança exceção: em caso de falha avisa UMA vez, marca o link como
     morto (esp32 = None) e devolve False.
     """
-    global esp32, aviso_link_morto
+    global esp32, aviso_link_morto, porta_em_uso
 
     if esp32 is None:
         if not aviso_link_morto:
-            print(f"Sem conexão Bluetooth - letra '{letra}' não enviada.")
+            print(f"Sem link serial - letra '{letra}' não enviada.")
             aviso_link_morto = True
         return False
 
@@ -222,8 +262,9 @@ def enviar_comando(letra):
         return True
     except Exception as e:
         esp32 = None
+        porta_em_uso = None
         aviso_link_morto = True
-        print(f"Conexão Bluetooth perdida ao enviar '{letra}': {e}. "
+        print(f"Link serial perdido ao enviar '{letra}': {e}. "
               "Seguindo só com a câmera.")
         return False
 
@@ -483,6 +524,18 @@ def desenhar_hud(captura, maos, estado_confirmado, nome_imagem=None):
                 cv2.FONT_HERSHEY_SIMPLEX, 0.8,
                 COR_VERDE if ligado else COR_VERMELHA, 2)
 
+    # Canal em uso: deixa óbvio se o teste está no Bluetooth ou no USB
+    # (e se o link nem abriu, caso em que nada é enviado).
+    y += 28
+    if porta_em_uso:
+        texto_porta = f"PORT: {porta_em_uso}"
+        cor_porta = COR_VERDE
+    else:
+        texto_porta = f"PORT: sem link ({porta_pedida})"
+        cor_porta = COR_VERMELHA
+    cv2.putText(captura, texto_porta, (10, y),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.55, cor_porta, 1)
+
     if nome_imagem:
         y += 28
         cv2.putText(captura, f"img: {nome_imagem}", (10, y),
@@ -591,11 +644,82 @@ def mostrar_estado(estado_confirmado):
 
 
 # =====================================================================
+# LINHA DE COMANDO
+# =====================================================================
+def analisar_argumentos(argv=None):
+    """Lê --porta e --listar. Sem argumento, tudo funciona como antes."""
+    parser = argparse.ArgumentParser(
+        description="Teste do barco: 2 maos abertas -> pino 25 do ESP32.",
+        epilog=f"Sem --porta, usa o Bluetooth ({PORTA_BLUETOOTH}). "
+               "Para o USB use a COM do ESP32 (--listar mostra).",
+    )
+    parser.add_argument(
+        "--porta",
+        metavar="COMx",
+        default=PORTA_BLUETOOTH,
+        help=f"Porta serial do ESP32: Bluetooth ou USB (padrao: "
+             f"{PORTA_BLUETOOTH}).",
+    )
+    parser.add_argument(
+        "--baud",
+        type=int,
+        default=None,
+        metavar="N",
+        help=f"Baudrate da porta. Padrao: {BAUDRATE} no Bluetooth e "
+             f"{BAUDRATE_USB} em qualquer outra porta (o do barco.ino).",
+    )
+    parser.add_argument(
+        "--listar",
+        action="store_true",
+        help="Lista as portas seriais disponiveis e sai (nao abre a camera).",
+    )
+    return parser.parse_args(argv)
+
+
+def listar_portas():
+    """Imprime as portas seriais do PC. Devolve o código de saída."""
+    if serial is None:
+        print("pyserial não instalado (pip install pyserial): "
+              "não é possível listar as portas.")
+        return 1
+
+    try:
+        from serial.tools import list_ports
+    except ImportError:  # pragma: no cover - ambiente incomum
+        print("Este pyserial não tem serial.tools.list_ports.")
+        return 1
+
+    portas = list(list_ports.comports())
+    if not portas:
+        print("Nenhuma porta serial encontrada.")
+        print("  -> Cabo USB de DADOS conectado? Driver CP210x/CH340 instalado?")
+        return 0
+
+    print("Portas seriais disponíveis:")
+    for porta in portas:
+        print(f"  {porta.device:<8} {porta.description}")
+    print()
+    print("USB do ESP32 = a porta do driver CP210x/CH340 "
+          "(use com --porta, e feche o Monitor Serial).")
+    print("Bluetooth   = 'Standard Serial over Bluetooth link' "
+          "(a do PORTA_BLUETOOTH).")
+    return 0
+
+
+# =====================================================================
 # PROGRAMA PRINCIPAL
 # =====================================================================
 def main():
+    global porta_pedida
+
+    argumentos = analisar_argumentos()
+    if argumentos.listar:
+        return listar_portas()
+
+    porta_pedida = argumentos.porta
+
     carregar_imagens()
-    conectar_esp32()
+    conectar_esp32(argumentos.porta, argumentos.baud)
     detector = criar_detector()
 
     camera = cv2.VideoCapture(0)
@@ -663,4 +787,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

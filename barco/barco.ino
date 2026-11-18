@@ -9,6 +9,14 @@
 //   'A' -> as DUAS mãos estão abertas  => pino 25 = HIGH (LIGADO)
 //   'F' -> qualquer outro caso         => pino 25 = LOW  (DESLIGADO)
 //
+// DUAS ORIGENS aceitas, com a MESMA lógica (processarComando):
+//   1) Bluetooth Classic/SPP (ESP_BT) - nome "BARCO", uso no drone;
+//   2) Serial USB (Serial)            - o mesmo cabo de dados do upload.
+//      Serve para TESTAR SEM BLUETOOTH: `python leitura_mao_barco.py
+//      --porta COMx`. Nesse modo FECHE o Monitor Serial, senão a porta
+//      fica ocupada (o Windows não a abre duas vezes) e o texto digitado
+//      no monitor vira comando.
+//
 // O Python REENVIA a mesma letra a cada ~0,5 s enquanto o estado não
 // muda. Comando repetido é IDEMPOTENTE e SILENCIOSO aqui: só renova o
 // relógio do failsafe, sem reimprimir no Serial e sem piscar o LED.
@@ -32,31 +40,27 @@
 //  - O LED é não bloqueante (ledApagarEm + ledPendente + millis()), sem
 //    delay() no processamento; o único delay é o 20 ms do fim do loop.
 //
-// DIAGNÓSTICO (para "não aparece no Bluetooth do PC"):
-//  - Logo no boot imprime core, ESP-IDF, chip/revisão/núcleos, MAC
-//    Bluetooth (esp_read_mac) e heap livre. Serve para PROVAR que este
-//    firmware está rodando (e não o "LITO" antigo nem um sketch vazio).
-//  - Checa o retorno de ESP_BT.begin("BARCO") (é bool). Se falhar, avisa
-//    no Serial e TENTA DE NOVO a cada 3 s, sem travar o loop.
-//  - Reforça o modo de varredura (conectável + descobrível) e imprime o
-//    resultado. O nome "BARCO" é aplicado pelo próprio begin(); o core
-//    3.3.11 NÃO tem setDeviceName() nem setDiscoverable(), por isso o
-//    equivalente real é esp_bt_gap_set_scan_mode() (API do ESP-IDF).
-//  - Detecta e imprime UMA vez cada transição de conexão (hasClient()).
-//    Isso é só observabilidade: o failsafe NÃO depende de hasClient().
+// BLUETOOTH (mesmo esquema do esp32/esp32.ino, que funciona no PC):
+//  - Só `BluetoothSerial ESP_BT;` e um `ESP_BT.begin("BARCO")` no setup.
+//    Sem checar retorno, sem retry, sem ESP_BT.end(), sem
+//    esp_bt_gap_set_scan_mode() e sem consultar bonded/hasClient() no loop.
+//  - Todo diagnóstico extra de rádio foi REMOVIDO DE PROPÓSITO: em um PC o
+//    anúncio do "BARCO" não aparecia, enquanto o "LITO" (que só chama
+//    begin()) aparecia. Ficamos exatamente com o caminho já provado.
+//  - O que ainda é impresso é só texto no Serial USB; nenhuma chamada de
+//    rádio a mais. Se o problema for emparelhamento, veja o README >
+//    "Se o BARCO não aparecer no Bluetooth".
 // ------------------------------------------------------------------
 
 #include "BluetoothSerial.h" // Biblioteca padrão do ESP32 (Bluetooth Classic/SPP)
-#include "esp_gap_bt_api.h"  // esp_bt_gap_set_scan_mode(): modo descobrível
-#include "esp_mac.h"         // esp_read_mac() + ESP_MAC_BT
 
-// BluetoothSerial está marcada como [[deprecated]] no core 3.3.11 apenas
-// porque será removida do build padrão na 4.0.0 — Bluetooth Classic/SPP
-// continua suportado nesta versão. Silenciamos só ESTE aviso (a linha
-// abaixo) para manter o build limpo; o resto dos avisos segue ativo.
+// O core 3.3.11 marca BluetoothSerial como [[deprecated]] (só porque sairá
+// do build padrão na 4.0.0). Este #pragma é APENAS cosmético: não altera o
+// anúncio nem o comportamento do rádio — serve só para o build ficar com
+// zero avisos. Nenhuma chamada de rádio extra existe aqui.
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-BluetoothSerial ESP_BT;
+BluetoothSerial ESP_BT; // mesmo objeto simples do esp32/esp32.ino
 #pragma GCC diagnostic pop
 
 // --- Pinos ---
@@ -66,11 +70,9 @@ const int LED = 2;         // feedback; strapping pin (use resistor para GND)
 // Tempo do pulso curto no LED ao receber um comando novo (ms)
 const int BLINK_MS = 60;
 
-// Tempo máximo (ms) sem comando válido do Bluetooth antes do failsafe
+// Tempo máximo (ms) sem comando válido (de qualquer origem: BT ou USB)
+// antes do failsafe
 const unsigned long FAILSAFE_MS = 2000;
-
-// Intervalo entre novas tentativas de ESP_BT.begin() quando ele falha (ms)
-const unsigned long BT_RETRY_MS = 3000;
 
 // Instante (millis) do último COMANDO VÁLIDO recebido
 unsigned long ultimoByteMs = 0;
@@ -92,11 +94,6 @@ char ultimoByteIgnorado = 0;
 // Estado atual da saída (para o failsafe saber se precisa agir)
 bool saidaLigada = false;
 
-// --- Diagnóstico de Bluetooth (não interfere no protocolo) ---
-bool btPronto = false;                    // begin() retornou true
-unsigned long proximaTentativaBtMs = 0;   // quando tentar begin() de novo
-bool clienteConectado = false;            // estado anterior de hasClient()
-
 // ------------------------------------------------------------------
 // Aplica o estado da saída. Toda mudança passa por aqui.
 // ------------------------------------------------------------------
@@ -116,71 +113,86 @@ void blinkRapido() {
 }
 
 // ------------------------------------------------------------------
-// Bloco de diagnóstico de boot. Se estas linhas NÃO aparecerem no
-// Monitor Serial (115200), o problema é cabo/porta/gravação — não é
-// Bluetooth. Serve também para ver qual firmware está realmente rodando.
+// LÓGICA ÚNICA do protocolo. É chamada tanto pelo Bluetooth quanto pelo
+// Serial USB, então o comportamento é idêntico nas duas origens.
+// `origem` só aparece nas mensagens do Serial (nunca muda a decisão).
 // ------------------------------------------------------------------
-void imprimirDiagnostico() {
-  uint8_t mac[6] = {0, 0, 0, 0, 0, 0};
-  esp_read_mac(mac, ESP_MAC_BT); // MAC do controlador Bluetooth clássico
-
-  Serial.println();
-  Serial.println("=== BARCO: diagnostico de boot ===");
-  Serial.print("Core Arduino-ESP32: ");
-  Serial.println(ESP.getCoreVersion());
-  Serial.print("ESP-IDF: ");
-  Serial.println(ESP.getSdkVersion());
-  Serial.print("Chip: ");
-  Serial.print(ESP.getChipModel());
-  Serial.print(" rev ");
-  Serial.print(ESP.getChipRevision());
-  Serial.print(", nucleos: ");
-  Serial.println(ESP.getChipCores());
-  Serial.printf(
-    "MAC Bluetooth: %02X:%02X:%02X:%02X:%02X:%02X\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
-  );
-  Serial.print("Heap livre no boot: ");
-  Serial.print(ESP.getFreeHeap());
-  Serial.println(" bytes");
-  Serial.println("=================================");
-}
-
-// ------------------------------------------------------------------
-// Inicia o Bluetooth e REPORTA o resultado. begin() é bool: se falhar,
-// apenas agenda nova tentativa (sem travar) e explica no Serial.
-// ------------------------------------------------------------------
-void iniciarBluetooth() {
-  Serial.print("Iniciando Bluetooth Serial como \"BARCO\"... ");
-  bool ok = ESP_BT.begin("BARCO"); // nome próprio: não conflita com "LITO"
-
-  if (!ok) {
-    Serial.println("FALHOU (ESP_BT.begin() retornou false).");
-    Serial.println("  -> Nova tentativa em 3 s. Se repetir, veja README > 'Se o BARCO nao aparecer no Bluetooth'.");
-    proximaTentativaBtMs = millis() + BT_RETRY_MS;
+void processarComando(char sinalRecebido, const char *origem) {
+  // Byte desconhecido ('\n', '\r', texto digitado no Monitor Serial...):
+  // IGNORA. Não renova o failsafe (lixo não pode manter o pino 25 ligado),
+  // não vira ultimoComando (não pode "comer" o próximo 'A') e não bloqueia
+  // os demais bytes da rajada. Avisa uma vez por byte distinto.
+  if (sinalRecebido != 'A' && sinalRecebido != 'F') {
+    if (sinalRecebido != ultimoByteIgnorado) {
+      ultimoByteIgnorado = sinalRecebido;
+      Serial.print("Byte ignorado em ");
+      Serial.print(origem);
+      Serial.println(" (comando deve ser 'A' ou 'F').");
+    }
     return;
   }
 
-  btPronto = true;
-  Serial.println("OK.");
+  // Comando válido: a partir daqui ele renova o failsafe
+  ultimoByteMs = millis();
+  ultimoByteIgnorado = 0; // permite avisar de novo um lixo futuro
 
-  // O core 3.3.11 não expõe setDiscoverable(). O BluetoothSerial já liga
-  // o modo descobrível no ESP_SPP_INIT_EVT; reforçamos com a API real do
-  // ESP-IDF para garantir que o PC consiga listar "BARCO".
-  esp_err_t err = esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE);
-  if (err == ESP_OK) {
-    Serial.println("Modo de varredura: CONECTAVEL + DESCOBRIVEL (o PC deve listar \"BARCO\").");
-  } else {
-    Serial.print("AVISO: esp_bt_gap_set_scan_mode falhou, codigo ");
-    Serial.println((int)err);
+  // Comando repetido (o Python reenvia a cada ~0,5 s): já está aplicado,
+  // então só renova o failsafe — sem Serial e sem LED.
+  if (sinalRecebido == ultimoComando) {
+    return;
   }
+  ultimoComando = sinalRecebido;
 
-  // Estado de emparelhamento (bonded). getNumberOfBondedDevices() existe
-  // no core 3.3.11 e é só uma consulta, não bloqueia.
-  Serial.print("Dispositivos pareados (bonded): ");
-  Serial.println(ESP_BT.getNumberOfBondedDevices());
+  Serial.print("Sinal recebido em ");
+  Serial.print(origem);
+  Serial.print(": ");
+  Serial.println(sinalRecebido);
 
-  Serial.println("BARCO pronto para emparelhar.");
-  Serial.println("Teste: 'A' = duas maos abertas (pino 25 HIGH).");
+  switch (sinalRecebido) {
+    case 'A': // duas mãos abertas
+      definirSaida(true);
+      Serial.println("ABERTAS -> pino 25 LIGADO");
+      blinkRapido();
+      break;
+
+    case 'F': // qualquer outro caso
+      definirSaida(false);
+      Serial.println("FECHADAS -> pino 25 DESLIGADO");
+      blinkRapido();
+      break;
+  }
+}
+
+// ------------------------------------------------------------------
+// Consome TUDO que estiver disponível em UMA fonte (Bluetooth ou Serial
+// USB) e entrega byte a byte para processarComando().
+// ------------------------------------------------------------------
+void processarFonte(Stream &fonte, const char *origem) {
+  while (fonte.available()) {
+    // read() devolve int (-1 = nada); compara como int para não depender
+    // da signedness de char em bytes >= 0x80.
+    int lido = fonte.read();
+    if (lido < 0) {
+      break; // nada mais para ler
+    }
+    processarComando((char)lido, origem);
+  }
+}
+
+// ------------------------------------------------------------------
+// Bloco de diagnóstico de boot. Se estas linhas NÃO aparecerem no
+// Monitor Serial (115200), o problema é cabo/porta/gravação — não é
+// Bluetooth. Serve também para ver qual firmware está realmente rodando.
+// Sem chamadas de rádio: só texto.
+// ------------------------------------------------------------------
+void imprimirDiagnostico() {
+  Serial.println();
+  Serial.println("=== BARCO: firmware de teste (pino 25) ===");
+  Serial.print("Core Arduino-ESP32: ");
+  Serial.println(ESP.getCoreVersion());
+  Serial.print("Chip: ");
+  Serial.println(ESP.getChipModel());
+  Serial.println("==========================================");
 }
 
 void setup() {
@@ -193,85 +205,27 @@ void setup() {
 
   Serial.begin(115200);
 
-  // 2) Diagnóstico: prova qual firmware está rodando e em qual placa
+  // 2) Texto de boot (só Serial, nada de rádio): prova qual firmware roda
   imprimirDiagnostico();
 
-  // 3) Bluetooth com retorno checado
-  iniciarBluetooth();
+  // 3) Bluetooth EXATAMENTE como no esp32/esp32.ino que funciona:
+  //    só o begin(), com nome próprio para não colidir com o "LITO".
+  ESP_BT.begin("BARCO");
+  Serial.println("BARCO pronto para emparelhar.");
+  Serial.println("Teste: 'A' = duas maos abertas (pino 25 HIGH).");
+
+  // 4) O Serial USB também aceita 'A'/'F' (mesma lógica): plano B de teste.
+  Serial.println("Controle por USB (Serial) tambem ativo: A/F.");
+  Serial.println("  -> Para usar o USB, FECHE o Monitor Serial (a porta e uma so).");
 
   ultimoByteMs = millis(); // o failsafe começa a contar daqui
 }
 
 void loop() {
-  // --- Bluetooth: se begin() falhou, tenta de novo sem travar o loop ---
-  if (!btPronto && (long)(millis() - proximaTentativaBtMs) >= 0) {
-    ESP_BT.end(); // limpa estado parcial antes de tentar de novo
-    iniciarBluetooth();
-  }
-
-  // --- Transições de conexão: imprime UMA vez por mudança ---
-  // Apenas observabilidade. O failsafe abaixo continua independente de
-  // hasClient(): é decisão consciente não bloquear a saída por conexão.
-  bool conectadoAgora = btPronto && ESP_BT.hasClient();
-  if (conectadoAgora != clienteConectado) {
-    clienteConectado = conectadoAgora;
-    if (conectadoAgora) {
-      Serial.println("Cliente Bluetooth CONECTADO.");
-    } else {
-      Serial.println("Cliente Bluetooth DESCONECTADO.");
-    }
-  }
-
-  // Processa TODOS os bytes disponíveis neste passo
-  while (ESP_BT.available()) {
-    // read() devolve int (-1 = nada); compara como int para não depender
-    // da signedness de char em bytes >= 0x80.
-    int lido = ESP_BT.read();
-    if (lido < 0) {
-      break; // nada mais para ler
-    }
-    char sinalRecebido = (char)lido;
-
-    // Byte desconhecido ('\n', '\r', lixo do terminal...): IGNORA.
-    // Não renova o failsafe (lixo não pode manter o pino 25 ligado),
-    // não vira ultimoComando (não pode "comer" o próximo 'A') e não
-    // bloqueia os demais bytes da rajada. Avisa uma vez por byte distinto.
-    if (sinalRecebido != 'A' && sinalRecebido != 'F') {
-      if (sinalRecebido != ultimoByteIgnorado) {
-        ultimoByteIgnorado = sinalRecebido;
-        Serial.println("Byte ignorado (comando deve ser 'A' ou 'F').");
-      }
-      continue; // volta ao while: outros bytes da rajada seguem sendo lidos
-    }
-
-    // Comando válido: a partir daqui ele renova o failsafe
-    ultimoByteMs = millis();
-    ultimoByteIgnorado = 0; // permite avisar de novo um lixo futuro
-
-    // Comando repetido (o Python reenvia a cada ~0,5 s): já está
-    // aplicado, então só renova o failsafe — sem Serial e sem LED.
-    if (sinalRecebido == ultimoComando) {
-      continue;
-    }
-    ultimoComando = sinalRecebido;
-
-    Serial.print("Sinal recebido: ");
-    Serial.println(sinalRecebido);
-
-    switch (sinalRecebido) {
-      case 'A': // duas mãos abertas
-        definirSaida(true);
-        Serial.println("ABERTAS -> pino 25 LIGADO");
-        blinkRapido();
-        break;
-
-      case 'F': // qualquer outro caso
-        definirSaida(false);
-        Serial.println("FECHADAS -> pino 25 DESLIGADO");
-        blinkRapido();
-        break;
-    }
-  }
+  // --- Comandos: as DUAS origens usam a MESMA lógica ---
+  // Bluetooth primeiro, depois Serial USB. Nenhuma das duas bloqueia.
+  processarFonte(ESP_BT, "Bluetooth");
+  processarFonte(Serial, "USB");
 
   // --- Failsafe: sem comando válido por FAILSAFE_MS -> desliga a saída ---
   // Feito com millis(), sem delay() extra. Age uma vez por ausência de
@@ -281,7 +235,7 @@ void loop() {
     // esquece o último comando: se o mesmo estado chegar de novo (ex.:
     // PC voltou de uma suspensão), ele precisa religar a saída
     ultimoComando = 0;
-    Serial.println("FAILSAFE: sem comando Bluetooth, pino 25 DESLIGADO.");
+    Serial.println("FAILSAFE: sem comando (BT/USB), pino 25 DESLIGADO.");
   }
 
   // --- Blink não bloqueante do LED (nada de delay()) ---
