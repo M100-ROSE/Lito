@@ -75,7 +75,23 @@ câmera e envia comandos via Bluetooth Serial para um ESP32 (sketch Arduino em
     `PINO_SAIDA = 25` em LOW no topo do `setup()`, `'A'` → HIGH, `'F'` → LOW, comando
     repetido idempotente/silencioso, LED 2 não bloqueante e `FAILSAFE_MS = 2000` (zera
     `ultimoComando`). Sem PWM: é só liga/desliga.
-  - `barco/README.md` — pinos, protocolo A/F, como rodar, firmware e avisos.
+    **Diagnóstico de boot** (`imprimirDiagnostico()`): imprime core Arduino-ESP32, ESP-IDF,
+    modelo/revisão/núcleos do chip, **MAC Bluetooth** (`esp_read_mac(ESP_MAC_BT)`) e heap
+    livre — serve para provar qual firmware está gravado. `iniciarBluetooth()` checa o
+    retorno `bool` de `ESP_BT.begin("BARCO")`: se falhar, imprime `FALHOU`, agenda nova
+    tentativa a cada `BT_RETRY_MS = 3000` (com `ESP_BT.end()`) e **não trava o loop**;
+    se der certo, reforça o modo descobrível com `esp_bt_gap_set_scan_mode(...)` (o core
+    3.3.11 não tem `setDeviceName()/setDiscoverable()`), imprime o `esp_err_t` e os
+    dispositivos pareados (`getNumberOfBondedDevices()`). Transições de `hasClient()`
+    (`Cliente Bluetooth CONECTADO/DESCONECTADO`) aparecem **uma vez** cada, só como
+    observabilidade — o failsafe não depende de conexão. Bytes fora de `'A'`/`'F'`
+    (`\n`, `\r`, lixo) são ignorados e **não** renovam o failsafe.
+    `BluetoothSerial` está depreciada no core 3.3.11: o aviso é silenciado com
+    `#pragma GCC diagnostic` só na linha da declaração.
+  - `barco/README.md` — pinos, protocolo A/F, como rodar, firmware e avisos; traz a seção
+    **"Se o BARCO não aparecer no Bluetooth"** (7 passos: gravar de verdade, Monitor Serial
+    115200, cabo com dados, procurar em "Adicionar dispositivo", brownout, chip sem BT
+    Classic, mensagem de `FALHOU`) e a saída exata esperada no Monitor Serial.
 - `requirements.txt` — dependências Python fixadas (`mediapipe>=0.10.30,<0.11`,
   `opencv-python>=4.9`, `pyserial>=3.5`); instalar com `pip install -r requirements.txt`
   (Python 3.10+, testado em 3.14.6).
@@ -124,6 +140,41 @@ Como descobrir a porta: Gerenciador de Dispositivos → Portas (COM e LPT) → "
   (no OpenCV o eixo Y cresce para baixo; pulso = landmark 0).
 
 ## Histórico
+
+### 2026-11-18 — Barco: diagnóstico de Bluetooth que não anuncia
+
+**Solicitação**: "não está aparecendo para eu me conectar com barco no bluetooth" (placa
+ESP32 DevKit clássica; no PC não aparecia nem "BARCO" nem "LITO").
+
+**O que foi feito**:
+- [x] `barco/barco.ino`: bloco `imprimirDiagnostico()` no boot com core Arduino-ESP32,
+      ESP-IDF, modelo/revisão/núcleos do chip, MAC Bluetooth (`esp_read_mac(ESP_MAC_BT)`) e
+      heap livre — separa "firmware errado/não gravado" de "problema de rádio".
+- [x] `iniciarBluetooth()`: checa o retorno `bool` de `ESP_BT.begin("BARCO")`, imprime
+      `FALHOU` e tenta de novo a cada 3 s (`BT_RETRY_MS`, com `ESP_BT.end()`) sem travar o
+      loop; no sucesso reforça o modo descobrível com
+      `esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE)` e imprime
+      o `esp_err_t` (o core 3.3.11 não tem `setDeviceName()`/`setDiscoverable()`).
+- [x] Imprime dispositivos pareados (`getNumberOfBondedDevices()`) e as transições de
+      `hasClient()` uma vez por mudança (só observabilidade).
+- [x] Bytes fora de `'A'`/`'F'` agora são ignorados e **não** renovam o failsafe (antes
+      qualquer byte renovava); LED passou a usar a flag `ledPendente` em vez de `0` como
+      sentinela. Pino 25, protocolo A/F e `FAILSAFE_MS = 2000` mantidos.
+- [x] `#pragma GCC diagnostic ignored "-Wdeprecated-declarations"` apenas na declaração do
+      `BluetoothSerial` (depreciado no core 3.3.11).
+- [x] `barco/README.md`: seção "Se o BARCO não aparecer no Bluetooth" (7 passos) e a saída
+      exata do Monitor Serial.
+- [x] Compilação: `arduino-cli compile --fqbn esp32:esp32:esp32 --warnings all barco` →
+      0 erros, 0 avisos (1.064.404 B flash / 81%, 41.908 B RAM / 12%).
+
+**Arquivos alterados**: `barco/barco.ino`, `barco/README.md`, `contexto.md`.
+
+**Pendências**:
+- [ ] Teste em hardware: gravar o sketch, abrir o Monitor Serial em 115200 e reportar a
+      saída do bloco de diagnóstico (principalmente o resultado de `begin()` e o MAC BT)
+      para confirmar se o "BARCO" passa a aparecer no PC.
+- [ ] Se continuar sem anunciar, verificar no Serial se a placa é ESP32 clássico (S2/S3/C3
+      não têm Bluetooth Classic) e se há brownout/reset em loop.
 
 ### 2026-11-18 — Barco: imagens de estado na leitura
 
