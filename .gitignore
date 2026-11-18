@@ -17,5 +17,13 @@ Thumbs.db
 .DS_Store
 *.log
 
+# Arquivos de IDE (gerados localmente, não versionar)
+.idea/
+*.iml
+.vscode/
+
+# pyproject.toml gerado pelo IDE do barco (não versionar)
+barco/pyproject.toml
+
 # Artefatos de build
 build/
