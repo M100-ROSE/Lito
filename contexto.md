@@ -39,8 +39,14 @@ arquivo `esp32`).
 - `leitura/testebluetooth.py` — teste manual da conexão (usa os comandos `'1'`/`'0'`).
 - `esp32` — sketch Arduino (receptor Bluetooth Serial, nome do dispositivo "LITO"):
   loop rápido (`delay(20)`) que esvazia QUALQUER byte disponível com `while(ESP_BT.available())`,
-  `switch` com letras de direção (imprime o nome + blink no LED do pino 2) e, para
-  compatibilidade com `testebluetooth.py`, `'1'` acende e `'0'` apaga o LED;
+  `switch` com letras de direção que agora **acionam os 4 motores em modo de TESTE on/off**
+  (`HIGH` = ligado) pelos MOSFETs IRLB4132 — `E` → TE+FE, `D` → FD+TD, `F` → FD+FE,
+  `T` → TD+TE, `C` → todos os 4, `B` → nenhum — via `ligarMotores(fd, td, te, fe)` e
+  `pararMotores()`, com constantes `MOTOR_FD=25`, `MOTOR_TD=26`, `MOTOR_TE=33`,
+  `MOTOR_FE=32` colocadas em `OUTPUT`/`LOW` no início do `setup()`; imprime no Serial e
+  faz blink no LED do pino 2. **Failsafe** de `FAILSAFE_MS = 2000` com `millis()`: sem
+  nenhum byte Bluetooth por 2 s, desliga todos os motores. Para compatibilidade com
+  `testebluetooth.py`, `'1'` acende e `'0'` apaga **apenas o LED** (não tocam nos motores);
   byte desconhecido apenas avisa.
 - `modelo/drone.glb|.stl|.zip` — modelo 3D do drone.
 - `README.md` — documentação completa em 11 seções: arquitetura (pipeline
@@ -83,6 +89,39 @@ Como descobrir a porta: Gerenciador de Dispositivos → Portas (COM e LPT) → "
 
 ## Histórico
 
+### 2026-11-18 — Controle dos motores no sketch do ESP32 (modo teste)
+
+**Solicitação**: fazer o sketch do ESP32 realmente acionar os motores em vez de apenas
+imprimir a direção: esquerda liga só os motores da esquerda, direita só os da direita,
+baixo nenhum, cima todos, e assim por diante.
+
+**O que foi feito**:
+- [x] `esp32` passa a acionar os 4 motores em modo de TESTE on/off (`HIGH` = ligado),
+      cada GPIO no Gate de um MOSFET IRLB4132, conforme o mapeamento pedido:
+      `E` → TE (33) + FE (32); `D` → FD (25) + TD (26); `F` → FD (25) + FE (32);
+      `T` → TD (26) + TE (33); `C` → todos os 4; `B` → nenhum.
+- [x] Funções novas `ligarMotores(fd, td, te, fe)` e `pararMotores()`, com constantes
+      `MOTOR_FD=25`, `MOTOR_TD=26`, `MOTOR_TE=33`, `MOTOR_FE=32`; `pinMode(OUTPUT)` e
+      motores em `LOW` logo no início do `setup()` (nunca inicia com motor ligado).
+- [x] Serial passa a imprimir qual conjunto de motores ligou em cada comando.
+- [x] Failsafe: `FAILSAFE_MS = 2000` com `millis()` (sem `delay` extra) — 2 s sem
+      nenhum byte Bluetooth desligam todos os motores e avisam no Serial.
+- [x] `'1'`/`'0'` continuam apenas o LED do pino 2, sem tocar nos motores.
+- [x] Contrato Bluetooth mantido 100%: nome "LITO", mesmas letras,
+      `while (ESP_BT.available())` e `delay(20)`.
+- [x] Compilação validada com `arduino-cli` 1.5.1 / core `esp32:esp32 3.3.11`
+      (FQBN `esp32:esp32:esp32`): sucesso, sem erros.
+- [x] `README.md`: tabela do "Contrato Bluetooth" (seção 6) ganhou a coluna de efeito
+      nos motores + nota sobre o modo de teste on/off (MOSFET IRLB4132, sem PWM) e o
+      aviso de testar **sem hélices**.
+
+**Arquivos alterados**: `esp32`, `README.md`, `contexto.md`.
+
+**Pendências**:
+- [ ] Testar com a eletrônica/motores reais, sempre **SEM hélices**.
+- [ ] Depois migrar de on/off para PWM (controle de velocidade).
+- [ ] Confirmar o mapeamento dos pinos na montagem física (FD=25, TD=26, TE=33, FE=32).
+
 ### 2026-10-24 — Envio único pós-votação, caminhos robustos e comandos no ESP32
 
 **Solicitação**: fechar o ciclo de melhorias na leitura de mãos e no sketch do ESP32
@@ -117,6 +156,9 @@ commitar e enviar.
       `leitura/leitura_mão.py` se não for).
 - [ ] Testar o gesto cima/baixo com as mãos reais (agora é mais rigoroso) e calibrar se precisar.
 - [ ] Compilar/carregar o sketch `esp32` na placa via IDE Arduino (nunca testado).
+      _Atualização 2026-11-18: a COMPILAÇÃO foi validada com `arduino-cli` (core
+      `esp32:esp32 3.3.11`, FQBN `esp32:esp32:esp32`, sem erros); falta apenas carregar
+      na placa._
 - [ ] Futuro: comandos de rotação no próprio eixo (horário/anti-horário) citados no README.
 
 ### 2026-10-24 — Reescrita completa do README

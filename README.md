@@ -135,14 +135,19 @@ abaixo ficam em `leitura/direcoes/` e são exibidas na tela durante o uso:
 
 O `leitura_mão.py` envia **um byte (uma letra)** ao ESP32 a cada mudança de direção confirmada:
 
-| Letra | Direção  |
-|:-----:|:---------|
-| `T`   | TRÁS     |
-| `F`   | FRENTE   |
-| `E`   | ESQUERDA |
-| `D`   | DIREITA  |
-| `C`   | CIMA     |
-| `B`   | BAIXO    |
+| Letra | Direção  | Efeito nos motores (modo de teste) |
+|:-----:|:---------|:-----------------------------------|
+| `T`   | TRÁS     | Liga **TD** (GPIO 26) + **TE** (GPIO 33) |
+| `F`   | FRENTE   | Liga **FD** (GPIO 25) + **FE** (GPIO 32) |
+| `E`   | ESQUERDA | Liga **TE** (GPIO 33) + **FE** (GPIO 32) |
+| `D`   | DIREITA  | Liga **FD** (GPIO 25) + **TD** (GPIO 26) |
+| `C`   | CIMA     | Liga **todos** os 4 motores |
+| `B`   | BAIXO    | **Desliga** todos os motores |
+
+> ⚠️ **Modo de teste (on/off):** nesta etapa cada letra apenas **liga/desliga** os
+> motores via MOSFETs IRLB4132 — **não há PWM** nem controle de velocidade. O sketch
+> também desliga todos os motores (**failsafe**) se ficar mais de 2 s sem nenhum byte
+> do Bluetooth. **Teste sempre os motores SEM hélices.**
 
 **Extras de teste** (usados pelo `leitura/testebluetooth.py`):
 
