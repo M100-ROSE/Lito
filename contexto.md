@@ -67,6 +67,10 @@ câmera e envia comandos via Bluetooth Serial para um ESP32 (sketch Arduino em
     (`MIN_DEDOS_ABERTOS`), confiança ≥0,8; envia `'A'` só com exatamente 2 mãos e ambas
     abertas, qualquer outro caso `'F'`; reenvia a letra a cada 0,5 s (`INTERVALO_REENVIO`)
     por causa do failsafe; pyserial opcional e HUD com o estado do "PIN 25".
+    Exibe também uma janela separada **`estado`** (à direita do vídeo) com a imagem do
+    estado confirmado, de `leitura/direcoes/`: `baixo.jpg` quando `'A'` (pino 25 ligado)
+    e `esquerda.jpg` quando `'F'` ou quando ainda não há envio confirmado (`None`);
+    imagem faltando só gera aviso e fechar a janela no "X" não derruba o programa.
   - `barco/barco.ino` — receptor Bluetooth Serial **"BARCO"** (não conflita com o "LITO"):
     `PINO_SAIDA = 25` em LOW no topo do `setup()`, `'A'` → HIGH, `'F'` → LOW, comando
     repetido idempotente/silencioso, LED 2 não bloqueante e `FAILSAFE_MS = 2000` (zera
@@ -120,6 +124,37 @@ Como descobrir a porta: Gerenciador de Dispositivos → Portas (COM e LPT) → "
   (no OpenCV o eixo Y cresce para baixo; pulso = landmark 0).
 
 ## Histórico
+
+### 2026-11-18 — Barco: imagens de estado na leitura
+
+**Solicitação**: "adicione para a leitura mostrar a imagem baixo.jpg para quando mandar o
+sinal e esquerda.jpg quando não enviar nada" (na pasta `barco/`).
+
+**O que foi feito**:
+- [x] `barco/leitura_mao_barco.py`: nova janela fixa **`estado`**, separada da janela
+      `captura` e posicionada à direita do vídeo, mostrando a imagem do estado
+      **confirmado** vindo de `../leitura/direcoes/`: `'A'` (duas mãos abertas, pino 25
+      LIGADO) → `baixo.jpg`; `'F'` (pino 25 DESLIGADO) → `esquerda.jpg`; estado ainda não
+      confirmado (`None`) também mostra `esquerda.jpg` (nada sendo enviado), sem enviar
+      nenhuma letra.
+- [x] Imagens carregadas no início (`carregar_imagens()`), com aviso claro e sem crash se
+      faltarem; redimensionadas para altura máxima de 480 px mantendo a proporção;
+      `imshow` só quando o conteúdo muda; fechamento no "X" tolerado (não reabre à força,
+      não derruba); HUD mostra `img: baixo.jpg` / `img: esquerda.jpg`;
+      `destroyAllWindows()` do `finally` cobre a nova janela.
+- [x] Protocolo A/F, votação, reenvio de 0,5 s, failsafe e pinos **não mudaram**.
+- [x] `barco/README.md`: nova seção curta "Imagem de referência" (janela `estado`,
+      `baixo.jpg` com `'A'`, `esquerda.jpg` com `'F'`, imagem faltando e fechar no X).
+- [x] Validação: `py_compile` OK; cenários com stubs OK (`'A'` → baixo, `'F'` → esquerda,
+      `None` → esquerda no primeiro frame, sem `imshow` repetido, imagem inexistente sem
+      crash, troca A→F na mesma janela, "X" não reabre).
+
+**Arquivos alterados**: `barco/leitura_mao_barco.py`, `barco/README.md`, `contexto.md`.
+
+**Pendências**:
+- [ ] Nenhuma nova; seguem as pendências de hardware já registradas na entrada da pasta
+      `barco/` (teste com câmera + ESP32 real, conferir pino 25/LED do pino 2, ajustar
+      `PORTA_BLUETOOTH` e calibrar `MIN_DEDOS_ABERTOS`).
 
 ### 2026-11-18 — Pasta barco: teste das duas mãos abertas acionando o GPIO 25
 

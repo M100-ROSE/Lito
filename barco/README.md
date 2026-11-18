@@ -27,6 +27,14 @@ python leitura_mao_barco.py
 
 Teclas `s` ou `q` encerram. O modelo é usado de `../leitura/hand_landmarker.task`.
 
+## Imagem de referência
+
+Além da janela do vídeo, uma janela separada chamada **`estado`** (à direita
+do vídeo) mostra a imagem do estado **confirmado**, de `../leitura/direcoes/`:
+`baixo.jpg` quando o estado é `'A'` (pino 25 **LIGADO**) e `esquerda.jpg`
+quando é `'F'` (pino 25 **DESLIGADO**). Se a imagem faltar, o script só avisa
+e continua; fechar a janela no "X" não derruba nem reabre nada.
+
 ## Firmware
 
 Abra `barco.ino` na Arduino IDE e grave com a placa ESP32.

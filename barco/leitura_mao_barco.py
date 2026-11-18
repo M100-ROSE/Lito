@@ -17,6 +17,13 @@ tem failsafe: sem nenhum byte por 2 s ele desliga a saída sozinho.
 
 Sem Bluetooth conectado o programa continua rodando com a câmera; apenas
 não envia comandos (avisa uma vez, sem travar).
+
+Além da janela do vídeo, uma janela separada ("estado") mostra a imagem de
+referência do estado confirmado: `baixo.jpg` quando o estado é 'A'
+(pino 25 ligado) e `esquerda.jpg` quando é 'F' (pino 25 desligado). Antes
+da primeira confirmação da votação (estado None) já aparece `esquerda.jpg`,
+porque nesse momento nada está sendo enviado. As imagens vêm de
+`leitura/direcoes/` e são apenas ilustrativas.
 """
 
 import collections
@@ -98,6 +105,37 @@ PASTA_SCRIPT = pathlib.Path(__file__).resolve().parent
 
 # Modelo reaproveitado da pasta `leitura/` (não duplicamos o arquivo).
 CAMINHO_MODELO = PASTA_SCRIPT.parent / "leitura" / "hand_landmarker.task"
+
+# Imagens de referência reaproveitadas da pasta `leitura/direcoes/`
+# (mesmos arquivos usados pelo teste do drone).
+PASTA_IMAGENS = PASTA_SCRIPT.parent / "leitura" / "direcoes"
+
+# Estado confirmado -> arquivo de imagem exibido na janela "estado".
+# 'A' (pino 25 LIGADO) mostra como fazer o gesto; 'F' (DESLIGADO) mostra
+# a alternativa. Fotos originais são grandes: reduzimos ao carregar.
+IMAGEM_POR_ESTADO = {
+    LETRA_ABERTAS: "baixo.jpg",
+    LETRA_FECHADAS: "esquerda.jpg",
+}
+
+# Altura máxima da imagem na tela (mantendo a proporção).
+ALTURA_MAXIMA_IMAGEM = 480
+
+# Nome FIXO da janela da imagem: trocamos o conteúdo, nunca criamos uma
+# janela nova por letra.
+NOME_JANELA_ESTADO = "estado"
+
+# Imagens carregadas: {nome_do_arquivo: ndarray já redimensionado}
+IMAGENS_ESTADO = {}
+
+# Qual arquivo está sendo exibido agora (None = nenhum) e se a janela foi
+# fechada pelo usuário no X (nesse caso não reabrimos à força).
+imagem_exibida = None
+janela_estado_descartada = False
+
+# Largura do frame atual da câmera, usada para posicionar a janela da
+# imagem logo à direita da janela do vídeo.
+largura_atual = 0
 
 # =====================================================================
 # ESTADO GLOBAL
@@ -366,6 +404,7 @@ def processar_frame(captura, detector):
     Retorna (captura, maos), onde `maos` é a lista descrita em
     estado_bruto() — já filtrada por CONFIANCA_MINIMA_LADO.
     """
+    global largura_atual
     # espelha como um espelho/câmera selfie: o MediaPipe espera isso para
     # classificar Left/Right corretamente
     captura = cv2.flip(captura, 1)
@@ -377,6 +416,7 @@ def processar_frame(captura, detector):
     resultado = detector.detect_for_video(mp_image, timestamp_ms)
 
     altura, largura, _ = captura.shape
+    largura_atual = largura
 
     maos = []
     vistas = {"Right": False, "Left": False}
@@ -419,8 +459,9 @@ def processar_frame(captura, detector):
 # =====================================================================
 # HUD
 # =====================================================================
-def desenhar_hud(captura, maos, estado_confirmado):
-    """Escreve no frame: nº de mãos, estado de cada mão e o pino 25."""
+def desenhar_hud(captura, maos, estado_confirmado, nome_imagem=None):
+    """Escreve no frame: nº de mãos, estado de cada mão, o pino 25 e a
+    imagem de referência exibida na janela "estado"."""
     y = 30
     cv2.putText(captura, f"Maos detectadas: {len(maos)}", (10, y),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, COR_CINZA, 2)
@@ -442,6 +483,11 @@ def desenhar_hud(captura, maos, estado_confirmado):
                 cv2.FONT_HERSHEY_SIMPLEX, 0.8,
                 COR_VERDE if ligado else COR_VERMELHA, 2)
 
+    if nome_imagem:
+        y += 28
+        cv2.putText(captura, f"img: {nome_imagem}", (10, y),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.55, COR_CINZA, 1)
+
     y += 30
     cv2.putText(captura, "'s' ou 'q' para sair", (10, y),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.55, COR_CINZA, 1)
@@ -458,9 +504,97 @@ def janela_existe(nome):
 
 
 # =====================================================================
+# IMAGENS DE REFERÊNCIA (janela "estado")
+# =====================================================================
+def redimensionar_para_tela(imagem):
+    """Reduz a imagem para ALTURA_MAXIMA_IMAGEM, mantendo a proporção.
+
+    As fotos originais têm alguns milhares de pixels de altura e abririam
+    gigantes na tela. Imagens já menores que o limite ficam intactas.
+    """
+    altura, largura = imagem.shape[:2]
+    if altura <= ALTURA_MAXIMA_IMAGEM:
+        return imagem
+
+    escala = ALTURA_MAXIMA_IMAGEM / float(altura)
+    nova_largura = max(1, int(round(largura * escala)))
+    return cv2.resize(imagem, (nova_largura, ALTURA_MAXIMA_IMAGEM),
+                      interpolation=cv2.INTER_AREA)
+
+
+def carregar_imagens():
+    """Carrega baixo.jpg e esquerda.jpg em IMAGENS_ESTADO.
+
+    Imagem faltando NÃO é fatal: avisa com o caminho procurado e o teste
+    segue normalmente, apenas sem exibir a imagem daquele estado.
+    """
+    faltando = []
+    for nome in sorted(set(IMAGEM_POR_ESTADO.values())):  # baixo, esquerda
+        caminho = PASTA_IMAGENS / nome
+        # cv2.imread devolve None em silêncio quando o arquivo não existe
+        imagem = cv2.imread(str(caminho))
+        if imagem is None:
+            faltando.append(nome)
+        else:
+            IMAGENS_ESTADO[nome] = redimensionar_para_tela(imagem)
+
+    if faltando:
+        print("AVISO: não foi possível carregar a(s) imagem(ns) de referência:")
+        for nome in faltando:
+            print(f"  - {nome} (procurado em {PASTA_IMAGENS})")
+        print("O teste continua, apenas sem exibir essa imagem.")
+
+
+def mostrar_estado(estado_confirmado):
+    """Reflete o estado CONFIRMADO na janela "estado" (nome fixo).
+
+    Para efeito de EXIBIÇÃO, estado None (votação ainda não confirmou nada,
+    ou seja, nada sendo enviado) é tratado como 'F': assim esquerda.jpg
+    aparece desde o primeiro frame. O protocolo não muda — nada é enviado
+    sem confirmação da votação.
+
+    - estado sem imagem carregada -> não mexe na janela;
+    - mesmo estado já exibido -> não reenvia imshow a cada frame;
+    - estado diferente -> troca o conteúdo da MESMA janela;
+    - usuário fechou no X -> esquecemos a janela e não reabrimos à força.
+    """
+    global imagem_exibida, janela_estado_descartada
+
+    estado_exibicao = LETRA_FECHADAS if estado_confirmado is None else estado_confirmado
+    nome_imagem = IMAGEM_POR_ESTADO.get(estado_exibicao)
+    if nome_imagem is None or nome_imagem not in IMAGENS_ESTADO:
+        return
+
+    if janela_estado_descartada:
+        return  # usuário fechou no X: não reabre à força
+
+    if imagem_exibida is not None:
+        if not janela_existe(NOME_JANELA_ESTADO):
+            # fechada no X: não insiste, só esquece o que estava na tela
+            janela_estado_descartada = True
+            imagem_exibida = None
+            return
+        if imagem_exibida == nome_imagem:
+            return  # conteúdo já correto: nada a fazer neste frame
+
+    try:
+        cv2.imshow(NOME_JANELA_ESTADO, IMAGENS_ESTADO[nome_imagem])
+        # primeira exibição: posiciona à direita da janela do vídeo.
+        # Nas trocas de estado a janela fica onde o usuário deixou.
+        if imagem_exibida is None:
+            cv2.moveWindow(NOME_JANELA_ESTADO, largura_atual + 50, 30)
+        imagem_exibida = nome_imagem
+    except cv2.error:
+        # janela inválida/fechada no X: apenas para de tentar
+        janela_estado_descartada = True
+        imagem_exibida = None
+
+
+# =====================================================================
 # PROGRAMA PRINCIPAL
 # =====================================================================
 def main():
+    carregar_imagens()
     conectar_esp32()
     detector = criar_detector()
 
@@ -488,7 +622,12 @@ def main():
             captura, maos = processar_frame(captura, detector)
 
             estado = votacao.atualizar(estado_bruto(maos))
-            captura = desenhar_hud(captura, maos, estado)
+
+            # janela separada com a imagem do estado CONFIRMADO (A/F)
+            mostrar_estado(estado)
+
+            captura = desenhar_hud(captura, maos, estado,
+                                   imagem_exibida)
 
             try:
                 cv2.imshow("barco - duas maos abertas", captura)
