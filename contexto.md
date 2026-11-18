@@ -1,8 +1,8 @@
 # Contexto do Projeto Lito
 
 Drone controlado por gestos das mãos: Python/MediaPipe/OpenCV no PC lê as mãos pela
-câmera e envia comandos via Bluetooth Serial para um ESP32 (sketch Arduino na raiz,
-arquivo `esp32`).
+câmera e envia comandos via Bluetooth Serial para um ESP32 (sketch Arduino em
+`esp32/esp32.ino`).
 
 - Equipe: Kaike, Maria e Marcos (1ºDSB, Colégio Kennedy — feira de ciências).
 - Repositório: https://github.com/M100-ROSE/Lito.git (branch `main`).
@@ -37,7 +37,7 @@ arquivo `esp32`).
 - `leitura/direcoes/*.jpg` — imagens de referência exibidas para cada direção.
 - `leitura/hand_landmarker.task` — modelo do MediaPipe.
 - `leitura/testebluetooth.py` — teste manual da conexão (usa os comandos `'1'`/`'0'`).
-- `esp32` — sketch Arduino (receptor Bluetooth Serial, nome do dispositivo "LITO"):
+- `esp32/esp32.ino` — sketch Arduino (receptor Bluetooth Serial, nome do dispositivo "LITO"):
   loop rápido (`delay(20)`) que esvazia QUALQUER byte disponível com `while(ESP_BT.available())`,
   `switch` com letras de direção que agora **acionam os 4 motores em modo de TESTE on/off**
   (`HIGH` = ligado) pelos MOSFETs IRLB4132 — `E` → TE+FE, `D` → FD+TD, `F` → FD+FE,
@@ -48,6 +48,7 @@ arquivo `esp32`).
   nenhum byte Bluetooth por 2 s, desliga todos os motores. Para compatibilidade com
   `testebluetooth.py`, `'1'` acende e `'0'` apaga **apenas o LED** (não tocam nos motores);
   byte desconhecido apenas avisa.
+- `esp32/README.md` — pinos, tabela de comandos, failsafe e como compilar/carregar o sketch.
 - `modelo/drone.glb|.stl|.zip` — modelo 3D do drone.
 - `README.md` — documentação completa em 11 seções: arquitetura (pipeline
   detecção → classificação → votação → envio), seção "A Homenagem" com fotos
@@ -88,6 +89,35 @@ Como descobrir a porta: Gerenciador de Dispositivos → Portas (COM e LPT) → "
   (no OpenCV o eixo Y cresce para baixo; pulso = landmark 0).
 
 ## Histórico
+
+### 2026-11-18 — Sketch do ESP32 movido para a pasta esp32/
+
+**Solicitação**: "bote as coisas referentes ao esp32 em uma pasta".
+
+**O que foi feito**:
+- [x] `esp32` (arquivo solto na raiz) movido para `esp32/esp32.ino` — conteúdo idêntico
+      (6979 bytes), preservado como rename pelo Git. A IDE Arduino exige que o sketch
+      esteja numa pasta com o mesmo nome do arquivo `.ino`.
+- [x] Criado `esp32/README.md` com pinos (FD=25, TD=26, TE=33, FE=32, LED=2), tabela de
+      comandos (E/D/F/T/C/B e `1`/`0`), aviso "teste SEM hélices", failsafe de 2000 ms e
+      instruções de compilação/carga.
+- [x] `README.md` atualizado nos pontos que citavam o sketch na raiz: nota do modo de teste,
+      nota do failsafe, passo "carregue o sketch" e a árvore "Estrutura do Repositório".
+- [x] Corrigida a nota de Baudrate do Contrato Bluetooth: `9600` é o valor usado pelo Python
+      na porta COM; o Bluetooth Serial (SPP) não usa baudrate (`ESP_BT.begin("LITO")`) e o
+      `Serial.begin(115200)` é só do Monitor Serial USB.
+- [x] Compilação validada com `arduino-cli` 1.5.1 / core `esp32:esp32 3.3.11` no novo
+      caminho: sucesso (81% flash, 12% RAM).
+
+**Arquivos alterados**: `esp32` → `esp32/esp32.ino` (rename), `esp32/README.md` (novo),
+`README.md`, `contexto.md`.
+
+**Pendências**:
+- [ ] Carregar o sketch na placa via IDE Arduino.
+- [ ] Testar com a eletrônica/motores reais, sempre **SEM hélices**.
+- [ ] Migrar de on/off para PWM (controle de velocidade).
+- [ ] Ajustar o comentário de `BAUDRATE = 9600` em `leitura/leitura_mão.py`, que ainda diz
+      "mesmo valor configurado no ESP32".
 
 ### 2026-11-18 — Controle dos motores no sketch do ESP32 (modo teste)
 

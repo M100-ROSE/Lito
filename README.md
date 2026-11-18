@@ -36,8 +36,8 @@ computador e classifica a direção do gesto: **cima, baixo, frente, trás, esqu
 O comando confirmado é enviado por **Bluetooth Serial** ao ESP32.
 
 > 🚨 **Nota honesta:** hoje o drone **ainda não voa** com os gestos — o ESP32 recebe a
-> direção e dá **feedback por LED** (pino 2). O protocolo Bluetooth, porém, já está
-> pronto para acionar os motores quando eletrônica de propulsão for implementada.
+> direção e **liga/desliga os 4 motores** em modo de teste (on/off, sem PWM), além do
+> **feedback por LED** (pino 2). Falta o controle de velocidade para o voo de verdade.
 
 Neste guia listamos todos os componentes necessários para montar o seu próprio Lito,
 o diagrama de ligação completo e todas as instruções de uso do software.
@@ -146,8 +146,8 @@ O `leitura_mão.py` envia **um byte (uma letra)** ao ESP32 a cada mudança de di
 
 > ⚠️ **Modo de teste (on/off):** nesta etapa cada letra apenas **liga/desliga** os
 > motores via MOSFETs IRLB4132 — **não há PWM** nem controle de velocidade. O sketch
-> também desliga todos os motores (**failsafe**) se ficar mais de 2 s sem nenhum byte
-> do Bluetooth. **Teste sempre os motores SEM hélices.**
+> (`esp32/esp32.ino`) também desliga todos os motores (**failsafe**) se ficar mais de
+> 2 s sem nenhum byte do Bluetooth. **Teste sempre os motores SEM hélices.**
 
 **Extras de teste** (usados pelo `leitura/testebluetooth.py`):
 
@@ -161,7 +161,7 @@ O `leitura_mão.py` envia **um byte (uma letra)** ao ESP32 a cada mudança de di
 | Parâmetro | Valor | Observação |
 |:----------|:------|:-----------|
 | Porta no PC | `COM4` | Ajustável na constante `PORTA_BLUETOOTH`, no topo do script |
-| Baudrate | `9600` | Mesmo valor configurado no sketch do ESP32 |
+| Baudrate | `9600` | Valor usado pelo Python na porta COM do PC. O Bluetooth Serial (SPP) não usa baudrate — o sketch só chama `ESP_BT.begin("LITO")`; o `Serial.begin(115200)` é apenas o Monitor Serial USB |
 
 > 💡 **Como descobrir a sua porta:** Gerenciador de Dispositivos → Portas
 > (COM e LPT) → **"Standard Serial over Bluetooth link (COMx)"** → anote o COMx.
@@ -359,8 +359,9 @@ pip install opencv-python mediapipe pyserial
 
 ### 9.3 Passo a passo
 
-1. **Carregue o sketch `esp32`** (arquivo na raiz do repositório) na placa, via IDE
-   Arduino. O dispositivo Bluetooth aparecerá com o nome **"LITO"**.
+1. **Carregue o sketch `esp32/esp32.ino`** (pasta `esp32/` do repositório) na placa, via
+   IDE Arduino — ou `arduino-cli compile --fqbn esp32:esp32:esp32 esp32` para só
+   verificar a compilação. O dispositivo Bluetooth aparecerá com o nome **"LITO"**.
 2. **Emparelhe o "LITO"** no Windows e descubra a porta COM (dica na seção
    [Contrato Bluetooth](#6--contrato-bluetooth)).
 3. **Ajuste a porta**, se necessário: edite a constante `PORTA_BLUETOOTH` no topo de
@@ -378,7 +379,9 @@ python "leitura/leitura_mão.py"
 
 ```text
 Lito/
-├── esp32                         # sketch Arduino (receptor Bluetooth, nome "LITO")
+├── esp32/                        # firmware do receptor Bluetooth (nome "LITO")
+│   ├── esp32.ino                 # sketch Arduino: motores on/off + failsafe
+│   └── README.md                 # pinos, comandos e como compilar/carregar
 ├── leitura/
 │   ├── leitura_mão.py            # programa principal: câmera + gestos + envio serial
 │   ├── testebluetooth.py         # teste manual da conexão Bluetooth ('1'/'0')
