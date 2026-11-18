@@ -397,6 +397,7 @@ Lito/
 ├── esp32/                        # firmware do receptor Bluetooth (nome "LITO")
 │   ├── esp32.ino                 # sketch Arduino: motores on/off + failsafe
 │   └── README.md                 # pinos, comandos e como compilar/carregar
+├── barco/                        # teste isolado: duas mãos abertas -> GPIO 25
 ├── leitura/
 │   ├── leitura_mao.py            # programa principal: câmera + gestos + envio serial
 │   ├── testebluetooth.py         # teste manual da conexão Bluetooth ('1'/'0')

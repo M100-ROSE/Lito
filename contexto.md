@@ -61,6 +61,17 @@ câmera e envia comandos via Bluetooth Serial para um ESP32 (sketch Arduino em
   avaliado e **descartado** (pode retornar `false` logo após reconectar e derrubar os motores);
   o motivo está documentado em comentário no sketch.
 - `esp32/README.md` — pinos, tabela de comandos, failsafe e como compilar/carregar o sketch.
+- `barco/` — **teste isolado do drone** ("as duas mãos estão abertas?"):
+  - `barco/leitura_mao_barco.py` — detector standalone (HandLandmarker em modo VIDEO,
+    2 mãos, suavização, votação 4 de 5). Mão "aberta" = ≥4 de 5 dedos esticados
+    (`MIN_DEDOS_ABERTOS`), confiança ≥0,8; envia `'A'` só com exatamente 2 mãos e ambas
+    abertas, qualquer outro caso `'F'`; reenvia a letra a cada 0,5 s (`INTERVALO_REENVIO`)
+    por causa do failsafe; pyserial opcional e HUD com o estado do "PIN 25".
+  - `barco/barco.ino` — receptor Bluetooth Serial **"BARCO"** (não conflita com o "LITO"):
+    `PINO_SAIDA = 25` em LOW no topo do `setup()`, `'A'` → HIGH, `'F'` → LOW, comando
+    repetido idempotente/silencioso, LED 2 não bloqueante e `FAILSAFE_MS = 2000` (zera
+    `ultimoComando`). Sem PWM: é só liga/desliga.
+  - `barco/README.md` — pinos, protocolo A/F, como rodar, firmware e avisos.
 - `requirements.txt` — dependências Python fixadas (`mediapipe>=0.10.30,<0.11`,
   `opencv-python>=4.9`, `pyserial>=3.5`); instalar com `pip install -r requirements.txt`
   (Python 3.10+, testado em 3.14.6).
@@ -109,6 +120,44 @@ Como descobrir a porta: Gerenciador de Dispositivos → Portas (COM e LPT) → "
   (no OpenCV o eixo Y cresce para baixo; pulso = landmark 0).
 
 ## Histórico
+
+### 2026-11-18 — Pasta barco: teste das duas mãos abertas acionando o GPIO 25
+
+**Solicitação**: "só para teste, crie uma pasta chamada barco e nessa crie um novo código de
+leitura da mão como o da pasta leitura que leia se as duas mãos estão abertas ou não, se
+estiverem mande energia para o pino 25".
+
+**O que foi feito**:
+- [x] Criada a pasta `barco/`, separada do drone (nada de `leitura/` ou `esp32/` foi alterado).
+- [x] `barco/leitura_mao_barco.py`: detector standalone com o mesmo padrão de
+      `leitura/leitura_mao.py` (MediaPipe HandLandmarker em modo VIDEO, 2 mãos, suavização
+      de pontos, timestamp monotônico, votação e pyserial opcional), mas com regra simples:
+      mão aberta = ≥4 dos 5 dedos esticados (polegar medido por distância ao pulso),
+      confiança de lado ≥0,8; `'A'` só com **exatamente 2 mãos, ambas abertas**, qualquer
+      outro caso `'F'`; votação 4 de 5 (`JANELA_VOTACAO=5`, `VOTOS_MINIMOS=4`); envio na
+      mudança + reenvio a cada 0,5 s (`INTERVALO_REENVIO`) por causa do failsafe; falha de
+      escrita derruba o link com aviso único; HUD com nº de mãos, estado de cada mão e
+      "PIN 25: LIGADO/DESLIGADO"; teclas `s`/`q`; `PORTA_BLUETOOTH = "COM4"`, `BAUDRATE = 9600`.
+- [x] `barco/barco.ino`: receptor Bluetooth Serial **"BARCO"** (não conflita com o "LITO"),
+      `PINO_SAIDA = 25` em LOW no topo do `setup()`, `'A'` → HIGH, `'F'` → LOW, comando
+      repetido idempotente/silencioso (`ultimoComando`), LED 2 não bloqueante,
+      `FAILSAFE_MS = 2000` (zera `ultimoComando`), `while (ESP_BT.available())` + `delay(20)`.
+      Sem PWM: apenas liga/desliga.
+- [x] `barco/README.md` com pinos, protocolo A/F, como rodar, firmware e avisos.
+- [x] `README.md`: `barco/` acrescentado à árvore "Estrutura do Repositório".
+- [x] Validação: `py_compile` OK; 5 cenários com stubs OK (2 abertas → `'A'` após votação;
+      1 aberta + 1 fechada → `'F'`; 1 mão → `'F'`; reenvio de 0,5 s; link caindo não crasha);
+      `arduino-cli compile --fqbn esp32:esp32:esp32 barco` OK (1.061.868 B flash / 81%,
+      41.892 B RAM / 12%). Nada testado em hardware.
+
+**Arquivos alterados**: `barco/leitura_mao_barco.py` (novo), `barco/barco.ino` (novo),
+`barco/README.md` (novo), `README.md`, `contexto.md`.
+
+**Pendências**:
+- [ ] Testar em hardware real (câmera + ESP32 emparelhado como "BARCO").
+- [ ] Conferir o pino 25 na montagem e o LED do pino 2 (strapping pin: LED ao GND com resistor).
+- [ ] Ajustar `PORTA_BLUETOOTH` (`COM4` é o padrão) se o COM do "BARCO" for outro.
+- [ ] Calibrar `MIN_DEDOS_ABERTOS` se a detecção de mão aberta oscilar com as mãos reais.
 
 ### 2026-11-18 — Auditoria dos códigos e correções de robustez
 
