@@ -90,6 +90,8 @@ do próprio `ESP_BT.begin()`):
 === BARCO: firmware de teste (pino 25) ===
 Core Arduino-ESP32: 3.3.11
 Chip: ESP32-D0WD-V3
+Reset anterior: POWERON (1)
+Tempo ligado no boot: 412 ms
 ==========================================
 Pareamentos antigos apagados (faca o pareamento de novo no PC).
 BARCO pronto para emparelhar.
@@ -98,12 +100,27 @@ Controle por USB (Serial) tambem ativo: A/F.
   -> Para usar o USB, FECHE o Monitor Serial (a porta e uma so).
 ```
 
+`Reset anterior` mostra o motivo do último boot (`POWERON`, `EXT`, `SW`,
+`PANIC`, `INT_WDT`, `TASK_WDT`, `WDT`, `BROWNOUT`, `SDIO` ou
+`DESCONHECIDO (n)`), e `Tempo ligado no boot` é o `millis()` daquela linha.
+Quando o cliente Bluetooth entra ou sai, o loop imprime **uma vez por
+transição**:
+
+```text
+Cliente Bluetooth CONECTADO
+Cliente Bluetooth DESCONECTADO
+```
+
+Isso é **só leitura** (`hasClient()`): não muda o protocolo, o pino 25 nem o
+failsafe. Serve para separar "o Windows derrubou o link" de "a placa reiniciou".
+
 O Bluetooth aqui é **o mesmo esquema simples do `esp32/esp32.ino`** (que
 funciona): só `BluetoothSerial ESP_BT;` e `ESP_BT.begin("BARCO")`. Não há retry,
-não há `ESP_BT.end()`, não há `esp_bt_gap_set_scan_mode()`, não há consulta de
-bonded e não há detecção de conexão (`hasClient()`) no loop. Qualquer
-diagnóstico extra de rádio foi removido de propósito: em um PC o anúncio do
-"BARCO" não aparecia, e o "LITO" — que só chama `begin()` — aparecia.
+não há `ESP_BT.end()`, não há `esp_bt_gap_set_scan_mode()` e não há consulta de
+bonded. A única leitura de rádio no loop é `ESP_BT.hasClient()`, usada **só**
+para imprimir `Cliente Bluetooth CONECTADO/DESCONECTADO` (não interfere em
+nada). Qualquer outro diagnóstico de rádio foi removido de propósito: em um PC o
+anúncio do "BARCO" não aparecia, e o "LITO" — que só chama `begin()` — aparecia.
 
 A **única** exceção é `LIMPAR_PAREAMENTOS` (no topo do `barco.ino`):
 
@@ -184,6 +201,30 @@ Siga na ordem — cada passo elimina uma causa:
 - **Outro aparelho conectado:** a `BluetoothSerial` aceita **um cliente por
   vez**. Se celular/outro PC estiver conectado ao BARCO, o seu não entra —
   desconecte o outro (ou desligue o Bluetooth dele).
+
+## Conecta e cai depois de alguns segundos
+
+Olhe o Monitor Serial (115200) na hora da queda — ele diz qual dos dois casos é:
+
+- **O banner de boot reaparece a cada queda** (`=== BARCO: firmware...`):
+  a placa está **REINICIANDO**. Veja `Reset anterior:` — `BROWNOUT` indica
+  **alimentação fraca**: cabo fino/só-carga (sem dados), porta USB 3.0, hub,
+  carga no **GPIO 25**, ou LED no **GPIO 2** sem resistor. Troque de cabo e de
+  porta USB (de preferência 2.0 direta no PC) e teste **sem nada ligado no
+  pino 25**; se o `Reset anterior` mudar para `PANIC`/`WDT`, é firmware/crash,
+  não alimentação.
+- **Não reinicia; só aparece `Cliente Bluetooth DESCONECTADO`**: foi o
+  **Windows** derrubando o vínculo ocioso. Em SPP isso é **normal** quando
+  nenhum programa usa a porta COM. O teste real é rodar
+  `python leitura_mao_barco.py --porta COMx` e **manter a porta aberta** (a
+  conexão só se sustenta com um programa lendo/escrevendo). Confira também:
+  *Gerenciador de Dispositivos → seu rádio Bluetooth → Propriedades →
+  Gerenciamento de energia* → desmarque **"Permitir que o computador desligue
+  este dispositivo para economizar energia"**, e garanta que **nenhum outro
+  aparelho** (celular/outro PC) está conectado ao BARCO.
+- **Lembrete:** `LIMPAR_PAREAMENTOS 1` deve voltar para **0** depois do
+  pareamento funcionar — com `1`, cada reboot apaga o vínculo e o Windows
+  desconecta (e fica parecendo "queda").
 
 ## Avisos
 

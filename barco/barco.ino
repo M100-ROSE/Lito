@@ -42,10 +42,13 @@
 //
 // BLUETOOTH (mesmo esquema do esp32/esp32.ino, que funciona no PC):
 //  - Só `BluetoothSerial ESP_BT;` e um `ESP_BT.begin("BARCO")` no setup.
-//    Sem checar retorno, sem retry, sem ESP_BT.end(), sem
-//    esp_bt_gap_set_scan_mode() e sem consultar bonded/hasClient() no loop.
+//    Sem checar retorno, sem retry, sem ESP_BT.end() e sem
+//    esp_bt_gap_set_scan_mode().
 //  - ÚNICA exceção, opcional e controlada por LIMPAR_PAREAMENTOS (veja
 //    abaixo): apagar os bonds salvos UMA vez, logo depois do begin().
+//  - No loop, `ESP_BT.hasClient()` é apenas LIDO (sem alterar a lógica) para
+//    imprimir uma vez por transição "Cliente Bluetooth CONECTADO /
+//    DESCONECTADO". Serve para separar "link caiu" de "placa reiniciou".
 //  - Todo diagnóstico extra de rádio foi REMOVIDO DE PROPÓSITO: em um PC o
 //    anúncio do "BARCO" não aparecia, enquanto o "LITO" (que só chama
 //    begin()) aparecia. Ficamos exatamente com o caminho já provado.
@@ -72,6 +75,7 @@
 #define LIMPAR_PAREAMENTOS 1
 
 #include "BluetoothSerial.h" // Biblioteca padrão do ESP32 (Bluetooth Classic/SPP)
+#include "esp_system.h"      // esp_reset_reason(): motivo do último reset
 
 // O core 3.3.11 marca BluetoothSerial como [[deprecated]] (só porque sairá
 // do build padrão na 4.0.0). Este #pragma é APENAS cosmético: não altera o
@@ -112,6 +116,11 @@ char ultimoByteIgnorado = 0;
 
 // Estado atual da saída (para o failsafe saber se precisa agir)
 bool saidaLigada = false;
+
+// Último estado lido de ESP_BT.hasClient(), só para imprimir UMA vez por
+// transição (observabilidade: descobrir se o link cai ou a placa reinicia).
+// começa em false porque o ESP_BT ainda nem foi iniciado no boot.
+bool clienteBtAnterior = false;
 
 // ------------------------------------------------------------------
 // Aplica o estado da saída. Toda mudança passa por aqui.
@@ -199,6 +208,25 @@ void processarFonte(Stream &fonte, const char *origem) {
 }
 
 // ------------------------------------------------------------------
+// Traduz o motivo do último reset (esp_reset_reason()) para texto.
+// Serve só para o Monitor Serial: nada de rádio, nada de lógica.
+// ------------------------------------------------------------------
+const char *nomeMotivoReset(esp_reset_reason_t motivo) {
+  switch (motivo) {
+    case ESP_RST_POWERON:  return "POWERON";
+    case ESP_RST_EXT:      return "EXT";
+    case ESP_RST_SW:       return "SW";
+    case ESP_RST_PANIC:    return "PANIC";
+    case ESP_RST_INT_WDT:  return "INT_WDT";
+    case ESP_RST_TASK_WDT: return "TASK_WDT";
+    case ESP_RST_WDT:      return "WDT";
+    case ESP_RST_BROWNOUT: return "BROWNOUT";
+    case ESP_RST_SDIO:     return "SDIO";
+    default:               return "DESCONHECIDO";
+  }
+}
+
+// ------------------------------------------------------------------
 // Bloco de diagnóstico de boot. Se estas linhas NÃO aparecerem no
 // Monitor Serial (115200), o problema é cabo/porta/gravação — não é
 // Bluetooth. Serve também para ver qual firmware está realmente rodando.
@@ -211,6 +239,23 @@ void imprimirDiagnostico() {
   Serial.println(ESP.getCoreVersion());
   Serial.print("Chip: ");
   Serial.println(ESP.getChipModel());
+
+  // Motivo do último reset: se esta linha reaparecer a cada queda, a placa
+  // está REINICIANDO (BROWNOUT = alimentação fraca), não é o Windows
+  // derrubando o SPP ocioso.
+  esp_reset_reason_t motivoReset = esp_reset_reason();
+  Serial.print("Reset anterior: ");
+  Serial.print(nomeMotivoReset(motivoReset));
+  Serial.print(" (");
+  Serial.print((int)motivoReset);
+  Serial.println(")");
+
+  // Tempo ligado (millis do boot): se for sempre um valor pequeno, confirma
+  // que é reboot e não uma simples desconexão de Bluetooth.
+  Serial.print("Tempo ligado no boot: ");
+  Serial.print(millis());
+  Serial.println(" ms");
+
   Serial.println("==========================================");
 }
 
@@ -251,6 +296,18 @@ void setup() {
 }
 
 void loop() {
+  // --- Observabilidade: mudanças de conexão Bluetooth (só leitura) ---
+  // Imprime UMA vez por transição. Não altera nada do protocolo/failsafe.
+  bool clienteBtAgora = ESP_BT.hasClient();
+  if (clienteBtAgora != clienteBtAnterior) {
+    clienteBtAnterior = clienteBtAgora;
+    if (clienteBtAgora) {
+      Serial.println("Cliente Bluetooth CONECTADO");
+    } else {
+      Serial.println("Cliente Bluetooth DESCONECTADO");
+    }
+  }
+
   // --- Comandos: as DUAS origens usam a MESMA lógica ---
   // Bluetooth primeiro, depois Serial USB. Nenhuma das duas bloqueia.
   processarFonte(ESP_BT, "Bluetooth");

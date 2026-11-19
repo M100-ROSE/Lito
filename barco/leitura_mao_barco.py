@@ -72,7 +72,7 @@ except ImportError:  # pragma: no cover - depende do ambiente do usuário
 # Gerenciador de Dispositivos -> Portas (COM e LPT) ->
 # "Standard Serial over Bluetooth link (COMx)". Troque "COM4" pelo COMx
 # que aparecer no SEU PC (o do ESP32 emparelhado como "BARCO").
-PORTA_BLUETOOTH = "COM4"
+PORTA_BLUETOOTH = "COM5"
 
 # O Bluetooth Serial (SPP) não usa baudrate de verdade; o valor só precisa
 # ser aceito pelo driver da porta COM virtual. Mantido em 9600 como no
